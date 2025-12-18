@@ -339,6 +339,7 @@ class AuthController extends Controller
     {
         // try {
         $user = $request->user('sanctum');
+        //print_r($user->toarray());
 
         if (!$user) {
             return response()->json([
@@ -350,6 +351,8 @@ class AuthController extends Controller
         }
 
         $result = $this->authService->me($user);
+        //print_r($result);
+        //return response()->json($result, $result['http_status']);
 
         return response()->json([
             'http_status' => 200,

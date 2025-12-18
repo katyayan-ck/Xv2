@@ -427,6 +427,99 @@ class AuthenticationService
     }
 
     /**
+     * Get current authenticated user details
+     * 
+     * @param User $user The authenticated user object
+     * @return array
+     */
+    public function me($user): array
+    {
+        try {
+            // Refresh user from database
+            $user = User::find($user->id);
+
+            if (!$user) {
+                return [
+                    'success' => false,
+                    'code' => 'E001',
+                    'message' => 'User not found',
+                    'http_status' => 404,
+                ];
+            }
+
+            // Get device sessions
+            $devices = DeviceSession::where('user_id', $user->id)
+                ->whereNull('deleted_at')
+                ->select('id', 'device_id', 'device_name', 'platform', 'last_active_at', 'created_at')
+                ->get();
+
+            // Get current role assignments (use existing relationship)
+            $roleAssignments = $user->roleAssignments()
+                ->where('is_current', true)
+                ->where(function ($q) {
+                    $q->whereNull('to_date')
+                        ->orWhere('to_date', '>=', now());
+                })
+                ->get();
+
+            $currentToken = $user->currentAccessToken();
+
+            Log::info('User details retrieved', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+            ]);
+
+            return [
+                'success' => true,
+                'code' => 'S001',
+                'data' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'mobile' => $user->mobile,
+                    'code' => $user->code,
+                    'is_active' => (bool)$user->is_active,
+                    'created_at' => $user->created_at,
+                    'last_login_at' => $user->last_login_at,
+                    'role_assignments' => $roleAssignments->map(fn($a) => [
+                        'id' => $a->id,
+                        'role_id' => $a->role_id,
+                        'from_date' => $a->from_date,
+                        'to_date' => $a->to_date,
+                        'is_current' => (bool)$a->is_current,
+                    ])->toArray(),
+                    'devices' => $devices->map(fn($d) => [
+                        'id' => $d->id,
+                        'device_id' => $d->device_id,
+                        'device_name' => $d->device_name,
+                        'platform' => $d->platform,
+                        'last_active_at' => $d->last_active_at,
+                        'created_at' => $d->created_at,
+                    ])->toArray(),
+                    'current_token' => [
+                        'abilities' => $currentToken ? $currentToken->abilities : [],
+                        'last_used_at' => $currentToken?->last_used_at,
+                    ],
+                ],
+                'http_status' => 200,
+            ];
+        } catch (Exception $e) {
+            Log::error('Error retrieving user details', [
+                'user_id' => $user->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'code' => 'E500',
+                'message' => 'Internal server error',
+                'http_status' => 500,
+            ];
+        }
+    }
+
+
+
+    /**
      * Logout and revoke token
      */
     public function logout(): array
