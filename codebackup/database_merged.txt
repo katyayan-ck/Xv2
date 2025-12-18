@@ -1,0 +1,3121 @@
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\database\.
+
+File : .gitignore
+/////////Content of file .gitignore
+*.sqlite*
+///////End-of-File : .gitignore
+
+File : database.sqlite
+/////////Content of file database.sqlite
+SQLite format 3Ö	»
+ZÍ	ëÊë˜ZÃTbsCREATE UNIQUE INDEX "failed_jobs_uuid_unique" on "failed_jobs" ("uuid")Ç(##Ñtablefailed_jobsfailed_jobsCREATE TABLE "failed_jobs" ("id" integer primary key autoincrement not null, "uuid" varchar not null, "connection" text not null, "queue" text not null, "payload" text not null, "exception" text not null, "failed_at" datetime not null default CURRENT_TIMESTAMP)Ç`##Ötablejob_batchesjob_batchesCREATE TABLE "job_batches" ("id" varchar not null, "name" varchar not null, "total_jobs" integer not null, "pending_jobs" integer not null, "failed_jobs" integer not null, "failed_job_ids" text not null, "options" text, "cancelled_at" integer, "created_at" integer not null, "finished_at" integer, primary key ("id"))5I# integer not null, "reserved_at" integer, "available_at" integer not null, "created_at" integer not null)Å$##Çtablecache_lockscache_locksCREATE TABLE "cache_locks" ("key" varchar not null, "owner" varchar not null, "expiration" integer not null, primary key ("key"))5I#EÅ#indexsessions_last_activity_indexsessionsCREATE INDEX "sessions_last_activity_index" on "sessions" ("last_activity")j	9Åindexsessions_user_id_indexsessions
+CREATE INDEX "sessions_user_id_index" on "sessions" ("user_id")ÅWÉtablesessionssessionsCREATE TABLE "sessions" ("id" varchar not null, "user_id" integer, "ip_address" varchar, "user_agent" text, "payload" text not null, "last_activity" integer not null, primary key ("id"))/CnceCREATE TABLE sqlite_sequence(name,seq)Å$!!ÇtablemigrationsmigrationsCREATE TABLE "migrations" ("id" integer primary key autoincrement not null, "migration" varchar not null, "batch" integer not null)///////End-of-File : database.sqlite
+
+Folder : d:\xampp\htdocs\vdms\database\.\factories
+
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\database\.\factories
+
+File : UserFactory.php
+/////////Content of file UserFactory.php
+<?php
+
+namespace Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
+ */
+class UserFactory extends Factory
+{
+    /**
+     * The current password being used by the factory.
+     */
+    protected static ?string $password;
+
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'name' => fake()->name(),
+            'email' => fake()->unique()->safeEmail(),
+            'email_verified_at' => now(),
+            'password' => static::$password ??= Hash::make('password'),
+            'remember_token' => Str::random(10),
+        ];
+    }
+
+    /**
+     * Indicate that the model's email address should be unverified.
+     */
+    public function unverified(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'email_verified_at' => null,
+        ]);
+    }
+}
+///////End-of-File : UserFactory.php
+
+Folder : d:\xampp\htdocs\vdms\database\.\migrations
+
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\database\.\migrations
+
+File : 0001_01_01_000000_create_users_table.php
+/////////Content of file 0001_01_01_000000_create_users_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('sessions');
+    }
+};
+///////End-of-File : 0001_01_01_000000_create_users_table.php
+
+File : 0001_01_01_000001_create_cache_table.php
+/////////Content of file 0001_01_01_000001_create_cache_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('cache', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->mediumText('value');
+            $table->integer('expiration');
+        });
+
+        Schema::create('cache_locks', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->string('owner');
+            $table->integer('expiration');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cache');
+        Schema::dropIfExists('cache_locks');
+    }
+};
+///////End-of-File : 0001_01_01_000001_create_cache_table.php
+
+File : 0001_01_01_000002_create_jobs_table.php
+/////////Content of file 0001_01_01_000002_create_jobs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('queue')->index();
+            $table->longText('payload');
+            $table->unsignedTinyInteger('attempts');
+            $table->unsignedInteger('reserved_at')->nullable();
+            $table->unsignedInteger('available_at');
+            $table->unsignedInteger('created_at');
+        });
+
+        Schema::create('job_batches', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('name');
+            $table->integer('total_jobs');
+            $table->integer('pending_jobs');
+            $table->integer('failed_jobs');
+            $table->longText('failed_job_ids');
+            $table->mediumText('options')->nullable();
+            $table->integer('cancelled_at')->nullable();
+            $table->integer('created_at');
+            $table->integer('finished_at')->nullable();
+        });
+
+        Schema::create('failed_jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->unique();
+            $table->text('connection');
+            $table->text('queue');
+            $table->longText('payload');
+            $table->longText('exception');
+            $table->timestamp('failed_at')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('jobs');
+        Schema::dropIfExists('job_batches');
+        Schema::dropIfExists('failed_jobs');
+    }
+};
+///////End-of-File : 0001_01_01_000002_create_jobs_table.php
+
+File : 2025_12_07_193821_create_audits_table.php
+/////////Content of file 2025_12_07_193821_create_audits_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        $connection = config('audit.drivers.database.connection', config('database.default'));
+        $table = config('audit.drivers.database.table', 'audits');
+
+        Schema::connection($connection)->create($table, function (Blueprint $table) {
+
+            $morphPrefix = config('audit.user.morph_prefix', 'user');
+
+            $table->bigIncrements('id');
+            $table->string($morphPrefix . '_type')->nullable();
+            $table->unsignedBigInteger($morphPrefix . '_id')->nullable();
+            $table->string('event');
+            $table->morphs('auditable');
+            $table->text('old_values')->nullable();
+            $table->text('new_values')->nullable();
+            $table->text('url')->nullable();
+            $table->ipAddress('ip_address')->nullable();
+            $table->string('user_agent', 1023)->nullable();
+            $table->string('tags')->nullable();
+            $table->timestamps();
+
+            $table->index([$morphPrefix . '_id', $morphPrefix . '_type']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        $connection = config('audit.drivers.database.connection', config('database.default'));
+        $table = config('audit.drivers.database.table', 'audits');
+
+        Schema::connection($connection)->drop($table);
+    }
+};
+///////End-of-File : 2025_12_07_193821_create_audits_table.php
+
+File : 2025_12_07_193821_create_permission_tables.php
+/////////Content of file 2025_12_07_193821_create_permission_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        $teams = config('permission.teams');
+        $tableNames = config('permission.table_names');
+        $columnNames = config('permission.column_names');
+        $pivotRole = $columnNames['role_pivot_key'] ?? 'role_id';
+        $pivotPermission = $columnNames['permission_pivot_key'] ?? 'permission_id';
+
+        throw_if(empty($tableNames), Exception::class, 'Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+        throw_if($teams && empty($columnNames['team_foreign_key'] ?? null), Exception::class, 'Error: team_foreign_key on config/permission.php not loaded. Run [php artisan config:clear] and try again.');
+
+        Schema::create($tableNames['permissions'], static function (Blueprint $table) {
+            // $table->engine('InnoDB');
+            $table->bigIncrements('id'); // permission id
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+
+            $table->unique(['name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['roles'], static function (Blueprint $table) use ($teams, $columnNames) {
+            // $table->engine('InnoDB');
+            $table->bigIncrements('id'); // role id
+            if ($teams || config('permission.testing')) { // permission.testing is a fix for sqlite testing
+                $table->unsignedBigInteger($columnNames['team_foreign_key'])->nullable();
+                $table->index($columnNames['team_foreign_key'], 'roles_team_foreign_key_index');
+            }
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+            if ($teams || config('permission.testing')) {
+                $table->unique([$columnNames['team_foreign_key'], 'name', 'guard_name']);
+            } else {
+                $table->unique(['name', 'guard_name']);
+            }
+        });
+
+        Schema::create($tableNames['model_has_permissions'], static function (Blueprint $table) use ($tableNames, $columnNames, $pivotPermission, $teams) {
+            $table->unsignedBigInteger($pivotPermission);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_permissions_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            } else {
+                $table->primary([$pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            }
+
+        });
+
+        Schema::create($tableNames['model_has_roles'], static function (Blueprint $table) use ($tableNames, $columnNames, $pivotRole, $teams) {
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            } else {
+                $table->primary([$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            }
+        });
+
+        Schema::create($tableNames['role_has_permissions'], static function (Blueprint $table) use ($tableNames, $pivotRole, $pivotPermission) {
+            $table->unsignedBigInteger($pivotPermission);
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+
+            $table->primary([$pivotPermission, $pivotRole], 'role_has_permissions_permission_id_role_id_primary');
+        });
+
+        app('cache')
+            ->store(config('permission.cache.store') != 'default' ? config('permission.cache.store') : null)
+            ->forget(config('permission.cache.key'));
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        $tableNames = config('permission.table_names');
+
+        throw_if(empty($tableNames), Exception::class, 'Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
+
+        Schema::drop($tableNames['role_has_permissions']);
+        Schema::drop($tableNames['model_has_roles']);
+        Schema::drop($tableNames['model_has_permissions']);
+        Schema::drop($tableNames['roles']);
+        Schema::drop($tableNames['permissions']);
+    }
+};
+///////End-of-File : 2025_12_07_193821_create_permission_tables.php
+
+File : 2025_12_07_193822_create_media_table.php
+/////////Content of file 2025_12_07_193822_create_media_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('media', function (Blueprint $table) {
+            $table->id();
+
+            $table->morphs('model');
+            $table->uuid()->nullable()->unique();
+            $table->string('collection_name');
+            $table->string('name');
+            $table->string('file_name');
+            $table->string('mime_type')->nullable();
+            $table->string('disk');
+            $table->string('conversions_disk')->nullable();
+            $table->unsignedBigInteger('size');
+            $table->json('manipulations');
+            $table->json('custom_properties');
+            $table->json('generated_conversions');
+            $table->json('responsive_images');
+            $table->unsignedInteger('order_column')->nullable()->index();
+
+            $table->nullableTimestamps();
+        });
+    }
+};
+///////End-of-File : 2025_12_07_193822_create_media_table.php
+
+File : 2025_12_07_193822_create_personal_access_tokens_table.php
+/////////Content of file 2025_12_07_193822_create_personal_access_tokens_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->text('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable()->index();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('personal_access_tokens');
+    }
+};
+///////End-of-File : 2025_12_07_193822_create_personal_access_tokens_table.php
+
+File : 2025_12_09_071442_create_system_tables.php
+/////////Content of file 2025_12_09_071442_create_system_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // System Settings Table
+        Schema::create('system_settings', function (Blueprint $table) {
+            $table->id();
+            $table->string('key')->unique(); // app_name, timezone, etc.
+            $table->text('value')->nullable();
+            $table->string('type')->default('string'); // string, boolean, json, array
+            $table->text('description')->nullable();
+            $table->boolean('is_editable')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+
+            $table->index('key');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Branches Table
+        Schema::create('branches', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // BKN, JPR
+            $table->string('name');
+            $table->string('short_name')->nullable();
+            $table->text('description')->nullable();
+            $table->string('phone')->nullable();
+            $table->string('email')->nullable();
+            $table->text('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('state')->nullable();
+            $table->string('pincode')->nullable();
+            $table->string('country')->default('India');
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->boolean('is_head_office')->default(false);
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Locations Table (Tehsil/Showroom under branch)
+        Schema::create('locations', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->string('code')->unique(); // BKN-LOC-001
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->string('phone')->nullable();
+            $table->string('email')->nullable();
+            $table->text('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('state')->nullable();
+            $table->string('pincode')->nullable();
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('branch_id');
+            $table->index('is_active');
+            $table->foreign('branch_id')->references('id')->on('branches')->cascadeOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Departments Table
+        Schema::create('departments', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // SALES, HR
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->unsignedBigInteger('parent_department_id')->nullable(); // Hierarchical
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->unsignedBigInteger('head_id')->nullable(); // Person ID as head
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('parent_department_id');
+            $table->index('branch_id');
+            $table->index('is_active');
+            $table->foreign('parent_department_id')->references('id')->on('departments')->nullOnDelete();
+            $table->foreign('branch_id')->references('id')->on('branches')->nullOnDelete();
+            //$table->foreign('head_id')->references('id')->on('persons')->nullOnDelete(); // Assuming persons table exists later, but order it before if needed
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Divisions Table (Sub-departments)
+        Schema::create('divisions', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('department_id');
+            $table->string('code')->unique(); // SALES-PERS
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->unsignedBigInteger('head_id')->nullable(); // Person ID
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('department_id');
+            $table->index('is_active');
+            $table->foreign('department_id')->references('id')->on('departments')->cascadeOnDelete();
+            //$table->foreign('head_id')->references('id')->on('persons')->nullOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Designations Table (CEO, Manager, etc.)
+        Schema::create('designations', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // CEO, MGR
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->integer('hierarchy_level')->default(0); // For ordering
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Verticals Table (Personal, Commercial)
+        Schema::create('verticals', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // PERS, COMM
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('verticals');
+        Schema::dropIfExists('designations');
+        Schema::dropIfExists('divisions');
+        Schema::dropIfExists('departments');
+        Schema::dropIfExists('locations');
+        Schema::dropIfExists('branches');
+        Schema::dropIfExists('system_settings');
+    }
+};
+///////End-of-File : 2025_12_09_071442_create_system_tables.php
+
+File : 2025_12_09_072738_create_person_tables.php
+/////////Content of file 2025_12_09_072738_create_person_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // Persons Table
+        Schema::create('persons', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // PERS-000001
+            $table->string('salutation')->nullable(); // Mr, Mrs, Dr
+            $table->string('first_name');
+            $table->string('middle_name')->nullable();
+            $table->string('last_name')->nullable();
+            $table->string('display_name')->nullable(); // Computed full name
+            $table->enum('gender', ['male', 'female', 'other', 'prefer_not_to_say'])->nullable();
+            $table->date('dob')->nullable();
+            $table->string('marital_status')->nullable(); // single, married
+            $table->string('spouse_name')->nullable();
+            $table->string('occupation')->nullable();
+            $table->string('aadhaar_no')->nullable();
+            $table->string('pan_no')->nullable();
+            $table->string('gst_no')->nullable();
+            $table->string('mobile_primary')->nullable();
+            $table->string('mobile_secondary')->nullable();
+            $table->string('email_primary')->nullable();
+            $table->string('email_secondary')->nullable();
+            $table->json('extra_data')->nullable(); // Custom fields
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('first_name');
+            $table->index('last_name');
+            $table->index('mobile_primary');
+            $table->index('email_primary');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Person Addresses Table
+        Schema::create('person_addresses', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('person_id');
+            $table->string('type')->default('residential'); // residential, office, billing
+            $table->string('address_line_1');
+            $table->string('address_line_2')->nullable();
+            $table->string('city');
+            $table->string('state');
+            $table->string('pincode');
+            $table->string('country')->default('India');
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->boolean('is_primary')->default(false);
+            $table->text('notes')->nullable();
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('person_id');
+            $table->index('type');
+            $table->index('is_primary');
+            $table->foreign('person_id')->references('id')->on('persons')->cascadeOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Person Contacts Table (Emergency/Reference)
+        Schema::create('person_contacts', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('person_id');
+            $table->string('type')->default('emergency'); // emergency, reference
+            $table->string('name');
+            $table->string('mobile')->nullable();
+            $table->string('email')->nullable();
+            $table->string('relationship')->nullable(); // father, spouse
+            $table->text('notes')->nullable();
+            $table->boolean('is_primary')->default(false);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('person_id');
+            $table->index('type');
+            $table->index('is_primary');
+            $table->foreign('person_id')->references('id')->on('persons')->cascadeOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Person Banking Details Table
+        Schema::create('person_banking_details', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('person_id');
+            $table->string('bank_name');
+            $table->string('account_holder_name');
+            $table->string('account_number');
+            $table->string('ifsc_code');
+            $table->string('account_type')->default('savings'); // savings, current
+            $table->string('branch_name')->nullable();
+            $table->string('swift_code')->nullable();
+            $table->boolean('is_primary')->default(false);
+            $table->boolean('is_verified')->default(false);
+            $table->timestamp('verified_at')->nullable();
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('person_id');
+            $table->index('is_primary');
+            $table->index('is_verified');
+            $table->foreign('person_id')->references('id')->on('persons')->cascadeOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Garages Table (Person's vehicle garages)
+        Schema::create('garages', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('person_id')->nullable();
+            $table->string('name');
+            $table->string('type')->nullable(); // Personal, Commercial, Workshop
+            $table->string('address')->nullable();
+            $table->string('city')->nullable();
+            $table->string('state')->nullable();
+            $table->string('pincode')->nullable();
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->string('contact_person')->nullable();
+            $table->string('mobile')->nullable();
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('person_id');
+            $table->index('is_active');
+            $table->foreign('person_id')->references('id')->on('persons')->nullOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('garages');
+        Schema::dropIfExists('person_banking_details');
+        Schema::dropIfExists('person_contacts');
+        Schema::dropIfExists('person_addresses');
+        Schema::dropIfExists('persons');
+    }
+};
+///////End-of-File : 2025_12_09_072738_create_person_tables.php
+
+File : 2025_12_09_073018_create_employee_tables.php
+/////////Content of file 2025_12_09_073018_create_employee_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // Employees Table
+        Schema::create('employees', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // BMPL-EMP-001
+            $table->unsignedBigInteger('person_id');
+            $table->unsignedBigInteger('designation_id');
+            $table->unsignedBigInteger('primary_branch_id');
+            $table->unsignedBigInteger('primary_department_id');
+
+            // Employment details
+            $table->date('joining_date');
+            $table->date('resignation_date')->nullable();
+            $table->enum('employment_type', ['permanent', 'contract', 'temporary', 'probation'])->default('permanent');
+            $table->string('employment_status')->default('active'); // active, on_leave, resigned, retired
+
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('person_id');
+            $table->index('is_active');
+            $table->foreign('person_id')->references('id')->on('persons')->cascadeOnDelete();
+            $table->foreign('designation_id')->references('id')->on('designations')->restrictOnDelete();
+            $table->foreign('primary_branch_id')->references('id')->on('branches')->restrictOnDelete();
+            $table->foreign('primary_department_id')->references('id')->on('departments')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Posts Table (Job positions as roles)
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // SALES-MGR-PERS-001
+            $table->string('title');
+            $table->unsignedBigInteger('department_id');
+            $table->unsignedBigInteger('designation_id');
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('location_id')->nullable();
+            $table->unsignedBigInteger('reports_to_post_id')->nullable();
+
+            $table->integer('max_assignees')->default(1);
+            $table->integer('current_assignees')->default(0);
+            $table->boolean('is_vacant')->default(false);
+            $table->timestamp('vacancy_published_at')->nullable();
+
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('department_id');
+            $table->index('is_active');
+            $table->foreign('department_id')->references('id')->on('departments')->restrictOnDelete();
+            $table->foreign('designation_id')->references('id')->on('designations')->restrictOnDelete();
+            $table->foreign('branch_id')->references('id')->on('branches')->restrictOnDelete();
+            $table->foreign('location_id')->references('id')->on('locations')->nullOnDelete();
+            $table->foreign('reports_to_post_id')->references('id')->on('posts')->nullOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Post Permissions (RBAC)
+        Schema::create('post_permissions', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('post_id');
+            $table->unsignedBigInteger('permission_id'); // From Spatie permissions
+            $table->unsignedBigInteger('granted_by')->nullable();
+            $table->timestamp('granted_at')->nullable();
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->timestamps();
+
+            $table->unique(['post_id', 'permission_id']);
+            $table->index('post_id');
+            $table->index('permission_id');
+            $table->foreign('post_id')->references('id')->on('posts')->cascadeOnDelete();
+            $table->foreign('permission_id')->references('id')->on('permissions')->cascadeOnDelete(); // Spatie
+            $table->foreign('granted_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Employee-Post Assignments
+        Schema::create('employee_post_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('post_id');
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->integer('assignment_order')->default(1);
+            $table->boolean('is_current')->default(true);
+
+            $table->text('remarks')->nullable();
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['employee_id', 'is_current']);
+            $table->index('post_id');
+            $table->index('from_date');
+            $table->foreign('employee_id')->references('id')->on('employees')->cascadeOnDelete();
+            $table->foreign('post_id')->references('id')->on('posts')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Employee-Department Assignments
+        Schema::create('employee_department_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('department_id');
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->boolean('is_current')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['employee_id', 'is_current']);
+            $table->index('department_id');
+            $table->foreign('employee_id')->references('id')->on('employees')->cascadeOnDelete();
+            $table->foreign('department_id')->references('id')->on('departments')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Employee-Branch Assignments
+        Schema::create('employee_branch_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('branch_id');
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->boolean('is_primary')->default(false);
+            $table->boolean('is_current')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['employee_id', 'is_current']);
+            $table->index('branch_id');
+            $table->foreign('employee_id')->references('id')->on('employees')->cascadeOnDelete();
+            $table->foreign('branch_id')->references('id')->on('branches')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Employee-Location Assignments
+        Schema::create('employee_location_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('location_id');
+            $table->unsignedBigInteger('branch_id');
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->boolean('is_current')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['employee_id', 'is_current']);
+            $table->index('location_id');
+            $table->foreign('employee_id')->references('id')->on('employees')->cascadeOnDelete();
+            $table->foreign('location_id')->references('id')->on('locations')->restrictOnDelete();
+            $table->foreign('branch_id')->references('id')->on('branches')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Employee-Vertical Assignments
+        Schema::create('employee_vertical_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('vertical_id');
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->boolean('is_current')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['employee_id', 'is_current']);
+            $table->index('vertical_id');
+            $table->foreign('employee_id')->references('id')->on('employees')->cascadeOnDelete();
+            $table->foreign('vertical_id')->references('id')->on('verticals')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('employee_vertical_assignments');
+        Schema::dropIfExists('employee_location_assignments');
+        Schema::dropIfExists('employee_branch_assignments');
+        Schema::dropIfExists('employee_department_assignments');
+        Schema::dropIfExists('employee_post_assignments');
+        Schema::dropIfExists('post_permissions');
+        Schema::dropIfExists('posts');
+        Schema::dropIfExists('employees');
+    }
+};
+///////End-of-File : 2025_12_09_073018_create_employee_tables.php
+
+File : 2025_12_09_074220_create_graph_tables.php
+/////////Content of file 2025_12_09_074220_create_graph_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('graph_nodes', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('role');
+            $table->json('attributes'); // e.g., {"branches": [1,2], "segments": [3]}
+            $table->timestamps();
+        });
+
+        Schema::create('graph_edges', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('from_node_id')->constrained('graph_nodes')->cascadeOnDelete();
+            $table->foreignId('to_node_id')->constrained('graph_nodes')->cascadeOnDelete();
+            $table->string('type'); // e.g., 'reports_to', 'approves'
+            $table->integer('level')->nullable();
+            $table->json('powers')->nullable(); // e.g., {"discount_max": 5000}
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('graph_edges');
+        Schema::dropIfExists('graph_nodes');
+    }
+};
+///////End-of-File : 2025_12_09_074220_create_graph_tables.php
+
+File : 2025_12_09_082999_create_user_system_tables.php
+/////////Content of file 2025_12_09_082999_create_user_system_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // User Types Table (Enum of user types)
+        Schema::create('user_types', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->unique(); // admin, employee, customer, vendor
+            $table->string('display_name');
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index('code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Update Users Table (Laravel default with additions)
+        Schema::table('users', function (Blueprint $table) {
+            $table->unsignedBigInteger('user_type_id')->nullable()->after('id');
+            $table->unsignedBigInteger('person_id')->nullable()->after('user_type_id');
+            $table->unsignedBigInteger('employee_id')->nullable()->after('person_id');
+            $table->unsignedBigInteger('mile_id')->nullable()->after('employee_id');
+            $table->string('code')->unique()->after('mile_id');
+            $table->string('avatar')->nullable()->after('code');
+            $table->string('mobile')->nullable()->after('avatar');
+            $table->boolean('is_active')->default(true)->after('remember_token');
+            $table->timestamp('last_login_at')->nullable()->after('is_active');
+            $table->unsignedBigInteger('deleted_by')->nullable()->after('last_login_at');
+            $table->softDeletes()->after('deleted_by');
+
+            $table->index('person_id');
+            $table->index('employee_id');
+            $table->index('user_type_id');
+            $table->index('code');
+            $table->index('mile_id');
+            $table->index('is_active');
+
+            $table->foreign('person_id')->references('id')->on('persons')->nullOnDelete();
+            $table->foreign('employee_id')->references('id')->on('employees')->nullOnDelete();
+            $table->foreign('user_type_id')->references('id')->on('user_types')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // User-Role Multi Assignments Table (Users can have multiple roles)
+        Schema::create('user_role_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('role_id'); // From Spatie roles
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->boolean('is_current')->default(true);
+            $table->text('remarks')->nullable();
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['user_id', 'role_id', 'from_date']);
+            $table->index('user_id');
+            $table->index('role_id');
+            $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
+            $table->foreign('role_id')->references('id')->on('roles')->cascadeOnDelete(); // Spatie
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // User-Division Assignments (For division-based access control)
+        Schema::create('user_division_assignments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('division_id');
+
+            $table->date('from_date');
+            $table->date('to_date')->nullable();
+            $table->boolean('is_current')->default(true);
+
+            // Audit fields
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['user_id', 'division_id']);
+            $table->index('user_id');
+            $table->index('division_id');
+            $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
+            $table->foreign('division_id')->references('id')->on('divisions')->restrictOnDelete();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('user_division_assignments');
+        Schema::dropIfExists('user_role_assignments');
+        Schema::dropIfExists('user_types');
+
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropForeign(['person_id']);
+            $table->dropForeign(['employee_id']);
+            $table->dropForeign(['user_type_id']);
+            $table->dropForeign(['deleted_by']);
+            $table->dropColumn(['person_id', 'employee_id', 'user_type_id', 'code', 'avatar', 'phone', 'is_active', 'last_login_at', 'deleted_by']);
+            $table->dropSoftDeletes();
+        });
+    }
+};
+///////End-of-File : 2025_12_09_082999_create_user_system_tables.php
+
+File : 2025_12_09_102407_create_keyword_masters_table.php
+/////////Content of file 2025_12_09_102407_create_keyword_masters_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('keyword_masters', function (Blueprint $table) {
+            $table->id();
+            $table->string('keyword')->unique();
+            $table->text('details')->nullable();
+            $table->json('extra_data')->nullable();
+            $table->integer('status')->default(1);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index('keyword');
+            $table->index('status');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('keyword_masters');
+    }
+};
+///////End-of-File : 2025_12_09_102407_create_keyword_masters_table.php
+
+File : 2025_12_09_102432_create_keyvalues_table.php
+/////////Content of file 2025_12_09_102432_create_keyvalues_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('keyvalues', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('keyword_master_id')->constrained()->cascadeOnDelete();
+            $table->string('key')->nullable();
+            $table->string('value');
+            $table->text('details')->nullable();
+            $table->foreignId('parent_id')->nullable()->constrained('keyvalues')->nullOnDelete();
+            $table->integer('level')->default(0);
+            $table->json('extra_data')->nullable();
+            $table->integer('status')->default(1);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->unique(['keyword_master_id', 'key', 'parent_id'], 'keyvalue_unique');
+            $table->index('keyword_master_id');
+            $table->index('status');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('keyvalues');
+    }
+};
+///////End-of-File : 2025_12_09_102432_create_keyvalues_table.php
+
+File : 2025_12_09_102904_create_vehicle_system_tables.php
+/////////Content of file 2025_12_09_102904_create_vehicle_system_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        // Brands Table
+        Schema::create('brands', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('code', 5)->unique();
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index('code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Segments Table
+        Schema::create('segments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('brand_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('code', 5);
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->unique(['brand_id', 'code']);
+            $table->index('brand_id');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // SubSegments Table (optional)
+        Schema::create('sub_segments', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('segment_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('code', 5);
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->unique(['segment_id', 'code']);
+            $table->index('segment_id');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // VehicleModels Table
+        Schema::create('vehicle_models', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('brand_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('segment_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('sub_segment_id')->nullable()->constrained('sub_segments')->cascadeOnDelete();
+            $table->string('name');
+            $table->string('custom_name')->nullable();
+            $table->string('oem_code')->nullable()->unique();
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index('brand_id');
+            $table->index('segment_id');
+            $table->index('sub_segment_id');
+            $table->index('oem_code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Variants Table
+        Schema::create('variants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('brand_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('segment_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('sub_segment_id')->nullable()->constrained('sub_segments')->cascadeOnDelete();
+            $table->foreignId('vehicle_model_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('custom_name')->nullable();
+            $table->string('oem_code')->nullable()->unique();
+            $table->text('description')->nullable();
+            $table->foreignId('permit_id')->nullable()->constrained('keyvalues')->nullOnDelete();
+            $table->foreignId('fuel_type_id')->nullable()->constrained('keyvalues')->nullOnDelete();
+            $table->integer('seating_capacity')->nullable();
+            $table->integer('wheels')->default(4);
+            $table->integer('gvw')->nullable();
+            $table->string('cc_capacity')->nullable();
+            $table->foreignId('body_type_id')->nullable()->constrained('keyvalues')->nullOnDelete();
+            $table->foreignId('body_make_id')->nullable()->constrained('keyvalues')->nullOnDelete();
+            $table->boolean('is_csd')->default(false);
+            $table->string('csd_index')->nullable();
+            $table->foreignId('status_id')->nullable()->constrained('keyvalues')->nullOnDelete();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index('brand_id');
+            $table->index('segment_id');
+            $table->index('sub_segment_id');
+            $table->index('vehicle_model_id');
+            $table->index('oem_code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Colors Table
+        Schema::create('colors', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('brand_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('segment_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('sub_segment_id')->nullable()->constrained('sub_segments')->nullOnDelete();
+            $table->foreignId('vehicle_model_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('name');
+            $table->string('code', 5)->unique();
+            $table->string('hex_code')->nullable();
+            $table->string('image')->nullable();
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index('brand_id');
+            $table->index('segment_id');
+            $table->index('sub_segment_id');
+            $table->index('vehicle_model_id');
+            $table->index('code');
+            $table->index('is_active');
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+
+        // Variant-Color Pivot
+        Schema::create('variant_colors', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('variant_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('color_id')->constrained()->cascadeOnDelete();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('variant_colors');
+        Schema::dropIfExists('colors');
+        Schema::dropIfExists('variants');
+        Schema::dropIfExists('vehicle_models');
+        Schema::dropIfExists('sub_segments');
+        Schema::dropIfExists('segments');
+        Schema::dropIfExists('brands');
+    }
+};
+///////End-of-File : 2025_12_09_102904_create_vehicle_system_tables.php
+
+File : 2025_12_09_103251_add_all_foreign_keys.php
+/////////Content of file 2025_12_09_103251_add_all_foreign_keys.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('departments', function (Blueprint $table) {
+            $table->foreign('head_id')->references('id')->on('persons')->nullOnDelete();
+        });
+
+        Schema::table('divisions', function (Blueprint $table) {
+            $table->foreign('head_id')->references('id')->on('persons')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('departments', function (Blueprint $table) {
+            $table->dropForeign(['head_id']);
+        });
+
+        Schema::table('divisions', function (Blueprint $table) {
+            $table->dropForeign(['head_id']);
+        });
+    }
+};
+///////End-of-File : 2025_12_09_103251_add_all_foreign_keys.php
+
+File : 2025_12_09_124715_create_reporting_hierarchies_table.php
+/////////Content of file 2025_12_09_124715_create_reporting_hierarchies_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('reporting_hierarchies', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('supervisor_id')->constrained('users')->cascadeOnDelete();
+            $table->string('topic'); // e.g., 'sales', 'insurance'
+            $table->json('combo_json')->nullable(); // Filters: brand, segment, etc.
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index(['user_id', 'topic']);
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('reporting_hierarchies');
+    }
+};
+///////End-of-File : 2025_12_09_124715_create_reporting_hierarchies_table.php
+
+File : 2025_12_09_124854_create_approval_hierarchies_table.php
+/////////Content of file 2025_12_09_124854_create_approval_hierarchies_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('approval_hierarchies', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('approver_id')->constrained('users')->cascadeOnDelete();
+            $table->integer('level'); // 1-5
+            $table->string('topic'); // e.g., 'quotation'
+            $table->json('combo_json')->nullable(); // Filters
+            $table->json('powers_json')->nullable(); // e.g., {'discount_max': 5000}
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->index(['topic', 'level']);
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('approval_hierarchies');
+    }
+};
+///////End-of-File : 2025_12_09_124854_create_approval_hierarchies_table.php
+
+File : 2025_12_09_134326_add_soft_deletes_to_graph_nodes_table.php
+/////////Content of file 2025_12_09_134326_add_soft_deletes_to_graph_nodes_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('graph_nodes', function (Blueprint $table) {
+            $table->softDeletes()->after('updated_at');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('graph_nodes', function (Blueprint $table) {
+            $table->dropSoftDeletes();
+        });
+    }
+};
+///////End-of-File : 2025_12_09_134326_add_soft_deletes_to_graph_nodes_table.php
+
+File : 2025_12_09_163050_create_modules_table.php
+/////////Content of file 2025_12_09_163050_create_modules_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('modules', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('code')->unique();
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
+            $table->foreign('deleted_by')->references('id')->on('users')->nullOnDelete();
+        });
+    }
+};
+///////End-of-File : 2025_12_09_163050_create_modules_table.php
+
+File : 2025_12_09_163106_create_processes_table.php
+/////////Content of file 2025_12_09_163106_create_processes_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('processes', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('processes');
+    }
+};
+///////End-of-File : 2025_12_09_163106_create_processes_table.php
+
+File : 2025_12_09_163111_update_permission_table.php
+/////////Content of file 2025_12_09_163111_update_permission_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('permissions', function (Blueprint $table) {
+            $table->foreignId('module_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('process_id')->nullable()->constrained()->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('permissions', function (Blueprint $table) {
+            $table->dropForeign(['module_id']);
+            $table->dropForeign(['process_id']);
+            $table->dropColumn(['module_id', 'process_id']);
+        });
+    }
+};
+///////End-of-File : 2025_12_09_163111_update_permission_table.php
+
+File : 2025_12_09_181427_create_user_data_scope_table.php
+/////////Content of file 2025_12_09_181427_create_user_data_scope_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('user_data_scopes', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->enum('scope_type', [
+                'branch',
+                'location',
+                'department',
+                'division',
+                'vertical',
+                'brand',
+                'segment',
+                'sub_segment',
+                'vehicle_model',
+                'variant',
+                'color'
+            ]);
+            $table->unsignedBigInteger('scope_value')->nullable();
+            $table->unsignedSmallInteger('hierarchy_level')->default(0);
+            $table->enum('status', ['active', 'inactive'])->default('active');
+            $table->timestamps();
+
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            $table->index(['user_id', 'scope_type', 'status']);
+            $table->unique(['user_id', 'scope_type', 'scope_value']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('user_data_scopes');
+    }
+};
+///////End-of-File : 2025_12_09_181427_create_user_data_scope_table.php
+
+File : 2025_12_09_194429_add_deleted_at_to_user_data_scopes_table.php
+/////////Content of file 2025_12_09_194429_add_deleted_at_to_user_data_scopes_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('user_data_scopes', function (Blueprint $table) {
+            // Soft delete timestamp
+            $table->softDeletes()
+                ->after('status');  // After status column
+
+            // Audit columns
+            $table->unsignedBigInteger('created_by')
+                ->nullable()
+                ->after('deleted_at')
+                ->comment('User who created this record');
+
+            $table->unsignedBigInteger('updated_by')
+                ->nullable()
+                ->after('created_by')
+                ->comment('User who last updated this record');
+
+            $table->unsignedBigInteger('deleted_by')
+                ->nullable()
+                ->after('updated_by')
+                ->comment('User who deleted this record');
+
+            // Foreign keys for audit columns (optional but recommended)
+            $table->foreign('created_by')
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
+
+            $table->foreign('updated_by')
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
+
+            $table->foreign('deleted_by')
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('user_data_scopes', function (Blueprint $table) {
+            // Drop foreign keys first
+            $table->dropForeign(['created_by']);
+            $table->dropForeign(['updated_by']);
+            $table->dropForeign(['deleted_by']);
+
+            // Drop columns
+            $table->dropSoftDeletes();
+            $table->dropColumn(['created_by', 'updated_by', 'deleted_by']);
+        });
+    }
+};
+///////End-of-File : 2025_12_09_194429_add_deleted_at_to_user_data_scopes_table.php
+
+File : 2025_12_09_201155_create_otp_tokens_table.php
+/////////Content of file 2025_12_09_201155_create_otp_tokens_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('otp_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->string('otp_hash');
+            $table->string('mobile');
+            $table->timestamp('expires_at');
+            $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('otp_tokens');
+    }
+};
+///////End-of-File : 2025_12_09_201155_create_otp_tokens_table.php
+
+File : 2025_12_09_201221_create_device_sessions_table.php
+/////////Content of file 2025_12_09_201221_create_device_sessions_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('device_sessions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->string('device_id')->unique();
+            $table->string('device_name');
+            $table->string('platform');
+            $table->timestamp('last_active_at')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('device_sessions');
+    }
+};
+///////End-of-File : 2025_12_09_201221_create_device_sessions_table.php
+
+File : 2025_12_09_201250_create_otp_attempt_logs_table.php
+/////////Content of file 2025_12_09_201250_create_otp_attempt_logs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('otp_attempt_logs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->string('mobile');
+            $table->string('action'); // e.g., 'request', 'verify', 'locked'
+            $table->string('ip_address');
+            $table->string('user_agent');
+            $table->string('reason')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('otp_attempt_logs');
+    }
+};
+///////End-of-File : 2025_12_09_201250_create_otp_attempt_logs_table.php
+
+File : 2025_12_09_201312_create_account_locks_table.php
+/////////Content of file 2025_12_09_201312_create_account_locks_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('account_locks', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->timestamp('locked_until');
+            $table->string('reason');
+            $table->foreignId('created_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('account_locks');
+    }
+};
+///////End-of-File : 2025_12_09_201312_create_account_locks_table.php
+
+File : 2025_12_10_192253_fix_colors_unique_and_variant_color_audit.php
+/////////Content of file 2025_12_10_192253_fix_colors_unique_and_variant_color_audit.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        // Fix color unique constraint: vehicle_model_id + code should be unique instead of just code
+        Schema::table('colors', function (Blueprint $table) {
+            // Drop the old incorrect unique constraint
+            $table->dropUnique('colors_code_unique');
+
+            // Add the correct unique constraint: vehicle_model_id + code
+            $table->unique(['vehicle_model_id', 'code'], 'colors_vehicle_model_id_code_unique');
+        });
+
+        // Add audit columns to variant_colors pivot table
+        Schema::table('variant_colors', function (Blueprint $table) {
+            // Add audit timestamp columns
+            $table->softDeletes()->after('updated_at');
+
+            // Add audit user tracking columns
+            $table->unsignedBigInteger('created_by')->nullable()->after('deleted_at');
+            $table->unsignedBigInteger('updated_by')->nullable()->after('created_by');
+            $table->unsignedBigInteger('deleted_by')->nullable()->after('updated_by');
+
+            // Add foreign key constraints for audit columns
+            $table->foreign('created_by')
+                ->references('id')
+                ->on('users')
+                ->onDelete('set null');
+
+            $table->foreign('updated_by')
+                ->references('id')
+                ->on('users')
+                ->onDelete('set null');
+
+            $table->foreign('deleted_by')
+                ->references('id')
+                ->on('users')
+                ->onDelete('set null');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('variant_colors', function (Blueprint $table) {
+            $table->dropForeignKey(['created_by']);
+            $table->dropForeignKey(['updated_by']);
+            $table->dropForeignKey(['deleted_by']);
+            $table->dropColumn(['created_by', 'updated_by', 'deleted_by', 'deleted_at']);
+        });
+
+        Schema::table('colors', function (Blueprint $table) {
+            // Drop the new unique constraint
+            $table->dropUnique('colors_vehicle_model_id_code_unique');
+
+            // Restore the old one if needed
+            $table->unique('code', 'colors_code_unique');
+        });
+    }
+};
+///////End-of-File : 2025_12_10_192253_fix_colors_unique_and_variant_color_audit.php
+
+File : 2025_12_12_192255_create_export_logs_table.php
+/////////Content of file 2025_12_12_192255_create_export_logs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+
+        Schema::create('export_logs', function (Blueprint $table) {
+            $table->id();
+
+            // User who performed the export
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->foreign('user_id')
+                ->references('id')
+                ->on('users')
+                ->onDelete('set null');
+
+            // File information
+            $table->string('filename');
+            $table->enum('export_type', [
+                'standard_users',
+                'rules_users',
+                'vehicle_inventory',
+                'custom'
+            ])->default('standard_users');
+
+            // Export statistics
+            $table->integer('total_records')->default(0);
+
+            // Filter information (JSON)
+            $table->json('filters')->nullable();
+
+            // File details
+            $table->string('file_path')->nullable();
+            $table->integer('file_size')->nullable(); // Size in bytes
+
+            // Export status
+            $table->enum('status', ['pending', 'processing', 'success', 'failed'])->default('pending');
+
+            // Timing information
+            $table->integer('duration_seconds')->nullable();
+            $table->timestamp('started_at')->nullable();
+            $table->timestamp('completed_at')->nullable();
+
+            // Download tracking
+            $table->timestamp('downloaded_at')->nullable();
+            $table->integer('download_count')->default(0);
+
+            // Timestamps and soft delete
+            $table->timestamps();
+            $table->softDeletes();
+
+            // Indexes for quick lookup
+            $table->index('user_id');
+            $table->index('export_type');
+            $table->index('status');
+            $table->index('created_at');
+            $table->index('downloaded_at');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('export_logs');
+    }
+};
+///////End-of-File : 2025_12_12_192255_create_export_logs_table.php
+
+File : 2025_12_12_192255_create_import_logs_table.php
+/////////Content of file 2025_12_12_192255_create_import_logs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('import_logs', function (Blueprint $table) {
+            $table->id();
+
+            // User who performed the import
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->foreign('user_id')
+                ->references('id')
+                ->on('users')
+                ->onDelete('set null');
+
+            // File information
+            $table->string('filename');
+            $table->enum('import_type', [
+                'standard_users',
+                'rules_users',
+                'vehicle_definition',
+                'custom'
+            ])->default('standard_users');
+
+            // Import statistics
+            $table->integer('total_records')->default(0);
+            $table->integer('imported_count')->default(0);
+            $table->integer('skipped_count')->default(0);
+            $table->integer('errors_count')->default(0);
+
+            // Error and warning details (JSON)
+            $table->json('errors')->nullable();
+            $table->json('warnings')->nullable();
+
+            // Import status
+            $table->enum('status', ['pending', 'processing', 'success', 'partial', 'failed'])->default('pending');
+
+            // Timing information
+            $table->integer('duration_seconds')->nullable();
+            $table->timestamp('started_at')->nullable();
+            $table->timestamp('completed_at')->nullable();
+
+            // Timestamps and soft delete
+            $table->timestamps();
+            $table->softDeletes();
+
+            // Indexes for quick lookup
+            $table->index('user_id');
+            $table->index('import_type');
+            $table->index('status');
+            $table->index('created_at');
+        });
+    }
+
+
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('import_logs');
+    }
+};
+///////End-of-File : 2025_12_12_192255_create_import_logs_table.php
+
+Folder : d:\xampp\htdocs\vdms\database\.\seeders
+
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\database\.\seeders
+
+File : DatabaseSeeder.php
+/////////Content of file DatabaseSeeder.php
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    use WithoutModelEvents;
+
+    /**
+     * Seed the application's database.
+     */
+    public function run(): void
+    {
+        $this->call(
+            [
+                ProductionRBACSeeder::class,
+                SiteSettingSeeder::class,
+                KeywordKeyvalueSeeder::class
+            ]
+        );
+    }
+}
+///////End-of-File : DatabaseSeeder.php
+
+File : KeywordKeyvalueSeeder.php
+/////////Content of file KeywordKeyvalueSeeder.php
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\Core\KeywordMaster;
+use App\Models\Core\Keyvalue;
+
+class KeywordKeyvalueSeeder extends Seeder
+{
+    public function run()
+    {
+        $keywords = [
+            'segment' => ['LMM', 'PERSONAL', 'COMMERCIAL'],
+            'sub_segment' => ['NON XUV'],
+            'fuel_type' => ['DIESEL', 'PETROL', 'CNG', 'ELECTRIC'],
+            'transmission' => ['MANUAL', 'AUTOMATIC'],
+            'drivetrain' => ['RWD', 'FWD'],
+            'body_make' => ['CARGO', 'PASSENGER', 'COMPLETE', 'SUV'],
+            'body_type' => ['COMPLETE'],
+            'permit' => ['GOODS', 'PRIVATE', 'PASSENGER'],
+            'vehicle_status' => ['ACTIVE', 'DISCONTINUED'],
+        ];
+
+        foreach ($keywords as $keyword => $values) {
+            $master = KeywordMaster::firstOrCreate(
+                ['keyword' => $keyword],
+                ['details' => ucwords(str_replace('_', ' ', $keyword)), 'status' => 1]
+            );
+
+            foreach ($values as $key) {
+                Keyvalue::firstOrCreate(
+                    ['keyword_master_id' => $master->id, 'key' => $key],
+                    ['value' => ucwords(strtolower(str_replace('_', ' ', $key))), 'status' => 1]
+                );
+            }
+        }
+    }
+}
+///////End-of-File : KeywordKeyvalueSeeder.php
+
+File : ProductionRBACSeeder.php
+/////////Content of file ProductionRBACSeeder.php
+<?php
+
+// database/seeders/ProductionRBACSeeder.php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
+use App\Models\Core\{Person, Employee,  Branch, Department, Designation, Post};
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
+
+/**
+ * Production RBAC Seeder
+ * 
+ * Creates:
+ * 1. Three roles: super_admin, foundation_manager, user_manager, vehicle_manager
+ * 2. Granular permissions grouped by module
+ * 3. Three test users with proper Person/Employee data
+ * 4. Super admin with wildcard permissions
+ */
+class ProductionRBACSeeder extends Seeder
+{
+    public function run(): void
+    {
+        echo "üîê Starting RBAC Seeding...\n";
+
+        // === STEP 1: Create Roles ===
+        $this->createRoles();
+
+        // === STEP 2: Create Permissions ===
+        $this->createPermissions();
+
+        // === STEP 3: Assign Permissions to Roles ===
+        $this->assignPermissionsToRoles();
+
+        // === STEP 4: Create Test Users ===
+        $this->createTestUsers();
+
+        echo "‚úÖ RBAC Seeding Complete!\n";
+    }
+
+    /**
+     * Create roles
+     */
+    private function createRoles(): void
+    {
+        echo "\nüìã Creating Roles...\n";
+
+        $roles = [
+            [
+                'name' => 'super_admin',
+                'display_name' => 'Super Administrator',
+                'description' => 'Full system access with wildcard permissions'
+            ],
+            [
+                'name' => 'foundation_manager',
+                'display_name' => 'Foundation Manager',
+                'description' => 'Manages organizational structure (branches, departments, divisions, etc.)'
+            ],
+            [
+                'name' => 'user_manager',
+                'display_name' => 'User Manager',
+                'description' => 'Manages users, employees, and basic access control'
+            ],
+            [
+                'name' => 'vehicle_manager',
+                'display_name' => 'Vehicle Manager',
+                'description' => 'Manages vehicle inventory, brands, models, variants, colors'
+            ],
+        ];
+
+        foreach ($roles as $role) {
+            $created = Role::updateOrCreate(
+                ['name' => $role['name']],
+                [
+                    'guard_name' => 'web',
+
+                ]
+            );
+            echo "  ‚úì Role: {$created->display_name}\n";
+        }
+    }
+
+    /**
+     * Create granular permissions organized by module
+     */
+    private function createPermissions(): void
+    {
+        echo "\nüîë Creating Permissions...\n";
+
+        $permissions = [
+            // ===== FOUNDATION PERMISSIONS =====
+            'foundation' => [
+                ['name' => 'foundation.view', 'description' => 'View foundation module'],
+                ['name' => 'foundation.create', 'description' => 'Create foundation entities'],
+                ['name' => 'foundation.edit', 'description' => 'Edit foundation entities'],
+                ['name' => 'foundation.delete', 'description' => 'Delete foundation entities'],
+
+                // Sub-module: Branches
+                ['name' => 'branch.view', 'description' => 'View branches'],
+                ['name' => 'branch.create', 'description' => 'Create branch'],
+                ['name' => 'branch.edit', 'description' => 'Edit branch'],
+                ['name' => 'branch.delete', 'description' => 'Delete branch'],
+
+                // Sub-module: Locations
+                ['name' => 'location.view', 'description' => 'View locations'],
+                ['name' => 'location.create', 'description' => 'Create location'],
+                ['name' => 'location.edit', 'description' => 'Edit location'],
+                ['name' => 'location.delete', 'description' => 'Delete location'],
+
+                // Sub-module: Departments
+                ['name' => 'department.view', 'description' => 'View departments'],
+                ['name' => 'department.create', 'description' => 'Create department'],
+                ['name' => 'department.edit', 'description' => 'Edit department'],
+                ['name' => 'department.delete', 'description' => 'Delete department'],
+
+                // Sub-module: Divisions
+                ['name' => 'division.view', 'description' => 'View divisions'],
+                ['name' => 'division.create', 'description' => 'Create division'],
+                ['name' => 'division.edit', 'description' => 'Edit division'],
+                ['name' => 'division.delete', 'description' => 'Delete division'],
+
+                // Sub-module: Designations
+                ['name' => 'designation.view', 'description' => 'View designations'],
+                ['name' => 'designation.create', 'description' => 'Create designation'],
+                ['name' => 'designation.edit', 'description' => 'Edit designation'],
+                ['name' => 'designation.delete', 'description' => 'Delete designation'],
+
+                // Sub-module: Posts
+                ['name' => 'post.view', 'description' => 'View posts'],
+                ['name' => 'post.create', 'description' => 'Create post'],
+                ['name' => 'post.edit', 'description' => 'Edit post'],
+                ['name' => 'post.delete', 'description' => 'Delete post'],
+            ],
+
+            // ===== USER MANAGEMENT PERMISSIONS =====
+            'users' => [
+                ['name' => 'users.view', 'description' => 'View users'],
+                ['name' => 'users.create', 'description' => 'Create user'],
+                ['name' => 'users.edit', 'description' => 'Edit user'],
+                ['name' => 'users.delete', 'description' => 'Delete user'],
+
+                // Sub-module: Persons
+                ['name' => 'person.view', 'description' => 'View persons'],
+                ['name' => 'person.create', 'description' => 'Create person'],
+                ['name' => 'person.edit', 'description' => 'Edit person'],
+                ['name' => 'person.delete', 'description' => 'Delete person'],
+
+                // Sub-module: Employees
+                ['name' => 'employee.view', 'description' => 'View employees'],
+                ['name' => 'employee.create', 'description' => 'Create employee'],
+                ['name' => 'employee.edit', 'description' => 'Edit employee'],
+                ['name' => 'employee.delete', 'description' => 'Delete employee'],
+
+                // Sub-module: User Types
+                ['name' => 'user_type.view', 'description' => 'View user types'],
+                ['name' => 'user_type.create', 'description' => 'Create user type'],
+                ['name' => 'user_type.edit', 'description' => 'Edit user type'],
+                ['name' => 'user_type.delete', 'description' => 'Delete user type'],
+            ],
+
+            // ===== VEHICLE MANAGEMENT PERMISSIONS =====
+            'vehicles' => [
+                ['name' => 'vehicles.view', 'description' => 'View vehicle module'],
+                ['name' => 'vehicles.create', 'description' => 'Create vehicle entities'],
+                ['name' => 'vehicles.edit', 'description' => 'Edit vehicle entities'],
+                ['name' => 'vehicles.delete', 'description' => 'Delete vehicle entities'],
+
+                // Sub-module: Brands
+                ['name' => 'brand.view', 'description' => 'View brands'],
+                ['name' => 'brand.create', 'description' => 'Create brand'],
+                ['name' => 'brand.edit', 'description' => 'Edit brand'],
+                ['name' => 'brand.delete', 'description' => 'Delete brand'],
+
+                // Sub-module: Segments
+                ['name' => 'segment.view', 'description' => 'View segments'],
+                ['name' => 'segment.create', 'description' => 'Create segment'],
+                ['name' => 'segment.edit', 'description' => 'Edit segment'],
+                ['name' => 'segment.delete', 'description' => 'Delete segment'],
+
+                // Sub-module: Models
+                ['name' => 'model.view', 'description' => 'View models'],
+                ['name' => 'model.create', 'description' => 'Create model'],
+                ['name' => 'model.edit', 'description' => 'Edit model'],
+                ['name' => 'model.delete', 'description' => 'Delete model'],
+
+                // Sub-module: Variants
+                ['name' => 'variant.view', 'description' => 'View variants'],
+                ['name' => 'variant.create', 'description' => 'Create variant'],
+                ['name' => 'variant.edit', 'description' => 'Edit variant'],
+                ['name' => 'variant.delete', 'description' => 'Delete variant'],
+
+                // Sub-module: Colors
+                ['name' => 'color.view', 'description' => 'View colors'],
+                ['name' => 'color.create', 'description' => 'Create color'],
+                ['name' => 'color.edit', 'description' => 'Edit color'],
+                ['name' => 'color.delete', 'description' => 'Delete color'],
+            ],
+
+            // ===== ADMIN PERMISSIONS =====
+            'admin' => [
+                ['name' => 'admin.manage', 'description' => 'Manage admin functions'],
+                ['name' => 'admin.dashboard', 'description' => 'Access admin dashboard'],
+                ['name' => 'rbac.view', 'description' => 'View RBAC configuration'],
+                ['name' => 'rbac.manage', 'description' => 'Manage roles and permissions'],
+                ['name' => 'audit.view', 'description' => 'View audit logs'],
+                ['name' => 'settings.view', 'description' => 'View settings'],
+                ['name' => 'settings.manage', 'description' => 'Manage settings'],
+            ],
+
+            // ===== WILDCARD PERMISSION (for Super Admin) =====
+            'wildcard' => [
+                ['name' => '*', 'description' => 'All permissions - Super Admin only'],
+            ],
+        ];
+
+        foreach ($permissions as $module => $perms) {
+            foreach ($perms as $perm) {
+                $created = Permission::updateOrCreate(
+                    ['name' => $perm['name']],
+                    [
+                        'guard_name' => 'web',
+                        //'description' => $perm['description'] ?? null,
+                    ]
+                );
+                echo "  ‚úì Permission: {$created->name}\n";
+            }
+        }
+    }
+
+    /**
+     * Assign permissions to roles
+     */
+    private function assignPermissionsToRoles(): void
+    {
+        echo "\nüîó Assigning Permissions to Roles...\n";
+
+        // === SUPER ADMIN: Gets all permissions (wildcard) ===
+        $superAdmin = Role::findByName('super_admin');
+        $allPermissions = Permission::all()->pluck('name')->toArray();
+        $superAdmin->syncPermissions($allPermissions);
+        echo "  ‚úì super_admin: " . count($allPermissions) . " permissions\n";
+
+        // === FOUNDATION MANAGER: Foundation module only ===
+        $foundationMgr = Role::findByName('foundation_manager');
+        $foundationPerms = Permission::where('name', 'like', 'foundation.%')
+            ->orWhere('name', 'like', 'branch.%')
+            ->orWhere('name', 'like', 'location.%')
+            ->orWhere('name', 'like', 'department.%')
+            ->orWhere('name', 'like', 'division.%')
+            ->orWhere('name', 'like', 'designation.%')
+            ->orWhere('name', 'like', 'post.%')
+            ->get();
+        $foundationMgr->syncPermissions($foundationPerms);
+        echo "  ‚úì foundation_manager: {$foundationPerms->count()} permissions\n";
+
+        // === USER MANAGER: User management only ===
+        $userMgr = Role::findByName('user_manager');
+        $userPerms = Permission::where('name', 'like', 'users.%')
+            ->orWhere('name', 'like', 'person.%')
+            ->orWhere('name', 'like', 'employee.%')
+            ->orWhere('name', 'like', 'user_type.%')
+            ->get();
+        $userMgr->syncPermissions($userPerms);
+        echo "  ‚úì user_manager: {$userPerms->count()} permissions\n";
+
+        // === VEHICLE MANAGER: Vehicle management only ===
+        $vehicleMgr = Role::findByName('vehicle_manager');
+        $vehiclePerms = Permission::where('name', 'like', 'vehicles.%')
+            ->orWhere('name', 'like', 'brand.%')
+            ->orWhere('name', 'like', 'segment.%')
+            ->orWhere('name', 'like', 'model.%')
+            ->orWhere('name', 'like', 'variant.%')
+            ->orWhere('name', 'like', 'color.%')
+            ->get();
+        $vehicleMgr->syncPermissions($vehiclePerms);
+        echo "  ‚úì vehicle_manager: {$vehiclePerms->count()} permissions\n";
+    }
+
+    /**
+     * Create test users with proper Person/Employee data
+     */
+    private function createTestUsers(): void
+    {
+        echo "\nüë• Creating Test Users with Person & Employee Data...\n";
+
+        // Get or create default branch
+        $branch = Branch::firstOrCreate(
+            ['code' => 'HQ'],
+            [
+                'name' => 'Head Quarter',
+                'address' => 'Main Office',
+                'city' => 'Bikaner',
+                'state' => 'Rajasthan',
+                'pincode' => '110001',
+                'country' => 'India',
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        // Get or create department
+        $department = Department::firstOrCreate(
+            ['code' => 'ADMIN', 'branch_id' => $branch->id],
+            [
+                'name' => 'Administration',
+                'description' => 'Core administration department',
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        // Get or create designations
+        $siteManagerDesig = Designation::firstOrCreate(
+            ['code' => 'SM'],
+            [
+                'name' => 'Site Manager',
+                'description' => 'Manages site operations',
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        $userManagerDesig = Designation::firstOrCreate(
+            ['code' => 'UM'],
+            [
+                'name' => 'User Manager',
+                'description' => 'Manages user access',
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        $vehicleManagerDesig = Designation::firstOrCreate(
+            ['code' => 'VM'],
+            [
+                'name' => 'Vehicle Manager',
+                'description' => 'Manages vehicle inventory',
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        // === USER 1: Chanderkant - Foundation Manager ===
+        echo "\n  Creating User 1: Chanderkant (Foundation Manager)...\n";
+
+        $person1 = Person::updateOrCreate(
+            ['email_primary' => 'chanderkant@bmpl.com'],
+            [
+                'first_name' => 'Chander',
+                'middle_name' => 'Kant',
+                'last_name' => 'Katyayan',
+                'display_name' => 'Chander kant Katyayan',
+                'dob' => Carbon::parse('1985-06-15'),
+                'gender' => 'male',
+                // 'blood_group' => 'O+',
+                'mobile_primary' => '9310260721',
+                'email_primary' => 'chanderkant@bmpl.com',
+                'code' => 'CKK001',
+                //'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        $employee1 = Employee::updateOrCreate(
+            ['person_id' => $person1->id],
+            [
+                'code' => 'EMP001',
+                'designation_id' => $siteManagerDesig->id,
+                'primary_branch_id' => $branch->id,
+                'joining_date' => Carbon::now()->subYears(5),
+                'primary_department_id' => 1,
+                //'reporting_to' => null,
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        // Assign to branch and department
+        $employee1->branches()->syncWithoutDetaching([
+            $branch->id => ['is_current' => true, 'from_date' => Carbon::now()]
+        ]);
+        $employee1->departments()->syncWithoutDetaching([
+            $department->id => ['is_current' => true, 'from_date' => Carbon::now()]
+        ]);
+
+        $user1 = User::updateOrCreate(
+            ['email' => 'chanderkant@bmpl.com'],
+            [
+                'name' => 'Chander Kant Katyayan',
+                'email' => 'chanderkant@bmpl.com',
+                'user_type_id' => 1,
+                'person_id' => $person1->id,
+                'employee_id' => $employee1->id,
+                'password' => Hash::make('manage1234'),
+                'code' => 'CKK001',
+                //'primary_department_id' => 1,
+                'is_active' => true,
+                'email_verified_at' => Carbon::now(),
+                //'created_by' => 1,
+            ]
+        );
+        $user1->assignRole('foundation_manager');
+        echo "    ‚úì User created and assigned 'foundation_manager' role\n";
+
+        // === USER 2: KrishanKant - User Manager ===
+        echo "\n  Creating User 2: KrishanKant (User Manager)...\n";
+
+        $person2 = Person::updateOrCreate(
+            ['email_primary' => 'krishankant@bmpl.com'],
+            [
+                'first_name' => 'Krishan',
+                'middle_name' => 'Kant',
+                'last_name' => 'Katyayan',
+                'display_name' => 'Krishan Kant Katyayan',
+                'dob' => Carbon::parse('1988-03-22'),
+                'gender' => 'male',
+                // 'blood_group' => 'B+',
+                'mobile_primary' => '9310360721',
+                'email_primary' => 'krishankant@bmpl.com',
+                'code' => 'KKK001',
+                //'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        $employee2 = Employee::updateOrCreate(
+            ['person_id' => $person2->id],
+            [
+                'code' => 'EMP002',
+                'designation_id' => $userManagerDesig->id,
+                'primary_branch_id' => $branch->id,
+                'joining_date' => Carbon::now()->subYears(3),
+                'primary_department_id' => 1,
+                //'reporting_to' => $employee1->id,
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        // Assign to branch and department
+        $employee2->branches()->syncWithoutDetaching([
+            $branch->id => ['is_current' => true, 'from_date' => Carbon::now()]
+        ]);
+        $employee2->departments()->syncWithoutDetaching([
+            $department->id => ['is_current' => true, 'from_date' => Carbon::now()]
+        ]);
+
+        $user2 = User::updateOrCreate(
+            ['email' => 'krishankant@bmpl.com'],
+            [
+                'name' => 'Krishan Kant Katyayan',
+                'email' => 'krishankant@bmpl.com',
+                'user_type_id' => 1,
+                'person_id' => $person2->id,
+                'employee_id' => $employee2->id,
+                'password' => Hash::make('manage1234'),
+                'code' => 'KKK001',
+                //'primary_department_id' => 1,
+                'is_active' => true,
+                'email_verified_at' => Carbon::now(),
+                //'created_by' => 1,
+            ]
+        );
+        $user2->assignRole('user_manager');
+        echo "    ‚úì User created and assigned 'user_manager' role\n";
+
+        // === USER 3: Keshav - Vehicle Manager ===
+        echo "\n  Creating User 3: Keshav (Vehicle Manager)...\n";
+
+        $person3 = Person::updateOrCreate(
+            ['email_primary' => 'keshav@bmpl.com'],
+            [
+                'first_name' => 'Keshav',
+                'middle_name' => '',
+                'last_name' => 'Kumar',
+                'display_name' => 'Keshav Kumar',
+                'dob' => Carbon::parse('1990-09-10'),
+                'gender' => 'male',
+                // 'blood_group' => 'AB+',
+                'mobile_primary' => '9876543212',
+                'email_primary' => 'keshav@bmpl.com',
+                'code' => 'KES001',
+                //'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        $employee3 = Employee::updateOrCreate(
+            ['person_id' => $person3->id],
+            [
+                'code' => 'EMP003',
+                'designation_id' => $vehicleManagerDesig->id,
+                'primary_branch_id' => $branch->id,
+                'joining_date' => Carbon::now()->subYears(2),
+                'primary_department_id' => 1,
+                //'reporting_to' => $employee1->id,
+                'is_active' => true,
+                //'created_by' => 1,
+            ]
+        );
+
+        // Assign to branch and department
+        $employee3->branches()->syncWithoutDetaching([
+            $branch->id => ['is_current' => true, 'from_date' => Carbon::now()]
+        ]);
+        $employee3->departments()->syncWithoutDetaching([
+            $department->id => ['is_current' => true, 'from_date' => Carbon::now()]
+        ]);
+
+        $user3 = User::updateOrCreate(
+            ['email' => 'keshav@bmpl.com'],
+            [
+                'name' => 'Keshav Kumar',
+                'email' => 'keshav@bmpl.com',
+                'user_type_id' => 1,
+                'person_id' => $person3->id,
+                'employee_id' => $employee3->id,
+                'password' => Hash::make('manage1234'),
+                'code' => 'KES001',
+                //'primary_department_id' => 1,
+                'is_active' => true,
+                'email_verified_at' => Carbon::now(),
+                //'created_by' => 1,
+            ]
+        );
+        $user3->assignRole('vehicle_manager');
+        echo "    ‚úì User created and assigned 'vehicle_manager' role\n";
+
+        // === SUPER ADMIN USER (if doesn't exist) ===
+        if (!User::where('email', 'super.admin@bmpl.com')->exists()) {
+            echo "\n  Creating Super Admin User...\n";
+
+            $personAdmin = Person::updateOrCreate(
+                ['email_primary' => 'super.admin@bmpl.com'],
+                [
+                    'first_name' => 'Super',
+                    'middle_name' => '',
+                    'last_name' => 'Admin',
+                    'display_name' => 'Super Admin',
+                    'dob' => Carbon::parse('1980-01-01'),
+                    'gender' => 'male',
+                    'mobile_primary' => '9999999999',
+                    'email_primary' => 'super.admin@bmpl.com',
+                    'code' => 'SUP001',
+                    //'is_active' => true,
+                    // 'created_by' => 1,
+                ]
+            );
+
+            $employeeAdmin = Employee::updateOrCreate(
+                ['person_id' => $personAdmin->id],
+                [
+                    'code' => 'EMP000',
+                    'designation_id' => $siteManagerDesig->id,
+                    'primary_branch_id' => $branch->id,
+                    'joining_date' => Carbon::now()->subYears(10),
+                    'primary_department_id' => 1,
+                    //'reporting_to' => null,
+                    'is_active' => true,
+                    // 'created_by' => 1,
+                ]
+            );
+
+            $userAdmin = User::create([
+                'name' => 'Super Admin',
+                'email' => 'super.admin@bmpl.com',
+                'user_type_id' => 1,
+                'person_id' => $personAdmin->id,
+                'employee_id' => $employeeAdmin->id,
+                'password' => Hash::make('admin1234'),
+                'code' => 'SUP001',
+                'is_active' => true,
+                'email_verified_at' => Carbon::now(),
+                //'created_by' => 1,
+            ]);
+            $userAdmin->assignRole('super_admin');
+            echo "    ‚úì Super Admin user created with wildcard permissions\n";
+        }
+
+        echo "\n  üìù Test Credentials:\n";
+        echo "    - Foundation Manager: chanderkant@bmpl.com / manage1234\n";
+        echo "    - User Manager: krishankant@bmpl.com / manage1234\n";
+        echo "    - Vehicle Manager: keshav@bmpl.com / manage1234\n";
+        echo "    - Super Admin: super.admin@bmpl.com / admin1234\n";
+    }
+}
+///////End-of-File : ProductionRBACSeeder.php
+
+File : SiteSettingSeeder.php
+/////////Content of file SiteSettingSeeder.php
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\Core\KeywordMaster;
+use App\Models\Core\Keyvalue;
+
+class SiteSettingSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $settings = [
+            // Site Identity Group
+            'site_identity' => [
+                'name'              => 'VDMS - Vehicle Dealership Management System',
+                'from_email'        => 'no-reply@bmpl.com',
+                'logo'              => 'logo.png',
+                'slogan'            => 'Drive Success with VDMS',
+                'footer_text'       => '¬© 2025 BMPL. All rights reserved.',
+                'owner_name'        => 'BMPL Group',
+                'owner_site_url'    => 'https://bmpl.com',
+            ],
+
+            // Site Settings Group
+            'site_settings' => [
+                'default_theme'     => 'tabler',
+                'locale'            => 'en',
+                'currency_symbol'   => '‚Çπ',
+                'date_format'       => 'd-m-Y',
+                'time_format'       => 'H:i',
+                'show_help_bubble'  => 'true',
+                'enable_live_chat'  => 'true',
+                'live_chat_timings' => json_encode(['start' => '09:00', 'end' => '18:00']),
+            ],
+
+            // Pricing Group
+            'pricing' => [
+                'gst_rate'              => '18',
+                'tds_rate'              => '2',
+                'round_to_place'        => '0',
+                'financial_year_start'  => '04-01',
+                'default_discount_type' => 'percentage',
+            ],
+        ];
+
+        foreach ($settings as $group => $items) {
+            $master = KeywordMaster::firstOrCreate(
+                ['keyword' => $group],
+                ['details' => ucfirst(str_replace('_', ' ', $group)) . ' Settings', 'status' => 1]
+            );
+
+            foreach ($items as $key => $value) {
+                Keyvalue::updateOrCreate(
+                    [
+                        'keyword_master_id' => $master->id,
+                        'key'               => $key,
+                    ],
+                    [
+                        'value'     => $value,
+                        'details'   => ucfirst(str_replace('_', ' ', $key)),
+                        'status'    => 1,
+                        'level'     => 0,
+                    ]
+                );
+            }
+        }
+
+        $this->command->info('Site settings seeded successfully using Keyword/Keyvalue system!');
+    }
+}
+///////End-of-File : SiteSettingSeeder.php
+
+File : SuperAdminSeeder.php
+/////////Content of file SuperAdminSeeder.php
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\User;
+use App\Models\Core\Person;
+use App\Models\Core\UserType;
+use App\Models\Core\GraphNode;
+use Spatie\Permission\Models\Role;
+
+class SuperAdminSeeder extends Seeder
+{
+    public function run()
+    {
+        // User Type
+        $userType = UserType::firstOrCreate(
+            ['code' => 'super_admin'],
+            [
+                'display_name' => 'Super Administrator',
+                'description' => 'Full system access',
+                'is_active' => true
+            ]
+        );
+
+        // Person
+        $person = Person::firstOrCreate(
+            ['email_primary' => 'super.admin@bmpl.com'],
+            [
+                'code' => Person::generateCode(),
+                'salutation' => 'Mr',
+                'first_name' => 'Super',
+                'last_name' => 'Admin',
+                'display_name' => 'Super Admin',
+                'gender' => 'male',
+                'mobile_primary' => '9212677774',
+                'email_primary' => 'super.admin@bmpl.com',
+            ]
+        );
+
+        if ($person->addresses()->count() === 0) {
+            $person->addresses()->create([
+                'type' => 'residential',
+                'address_line_1' => 'Super Space',
+                'city' => 'Delhi',
+                'state' => 'Delhi',
+                'pincode' => '110053',
+                'country' => 'India',
+                'is_primary' => true,
+            ]);
+        }
+
+        // Role (Spatie)
+        Role::firstOrCreate([
+            'name' => 'super-admin',
+            'guard_name' => 'web'
+        ]);
+
+        // User
+        $user = User::firstOrCreate(
+            ['email' => 'super.admin@bmpl.com'],
+            [
+                'user_type_id' => $userType->id,
+                'person_id' => $person->id,
+                'name' => 'Super Admin',
+                'email' => 'super.admin@bmpl.com',
+                'password' => bcrypt('admin1234'),
+                'is_active' => true,
+                'code' => 'SUDO',
+            ]
+        );
+
+        $user->assignRole('super-admin');
+
+        // Graph Node with wildcard
+        GraphNode::updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'role' => 'super-admin',
+                'attributes' => json_encode(['*' => true])
+            ]
+        );
+    }
+}
+///////End-of-File : SuperAdminSeeder.php
+

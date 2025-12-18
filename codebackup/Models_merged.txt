@@ -1,0 +1,4408 @@
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\app\models\.
+
+File : BaseModel.php
+/////////Content of file BaseModel.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
+use OwenIt\Auditing\Auditable as AuditableTrait;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\Translatable\HasTranslations;
+use App\Models\Traits\HasAuditFields;
+use App\Models\Traits\HasSlug;
+use App\Models\Traits\HasColumnTransformations;
+use App\Models\Traits\HasTreeStructure;
+
+/**
+ * BaseModel - Foundation model for all VDMS models
+ * 
+ * Features:
+ * - Soft deletes for data safety
+ * - Audit trail tracking (created_by, updated_by, deleted_by)
+ * - Media library integration (file uploads)
+ * - Automatic timestamp handling
+ * - Common scopes and relationships
+ * - Translations
+ * - Tree structure
+ * - Slug generation
+ * - Column transformations
+ */
+abstract class BaseModel extends Model implements Auditable, HasMedia
+{
+    use SoftDeletes;
+    use AuditableTrait;
+    use InteractsWithMedia;
+    use HasTranslations;
+    use HasAuditFields;
+    // use HasSlug;
+    //use HasTreeStructure;
+    use HasColumnTransformations;
+    //use FilterByDataScope;
+    //use HasTreeStructure;
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+        'extra_data' => 'array',
+        'is_active' => 'boolean',
+    ];
+
+    public $translatable = [];
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
+    protected $guarded = ['id'];
+
+    /**
+     * Enable timestamps
+     *
+     * @var bool
+     */
+    public $timestamps = true;
+
+    protected static function booted()
+    {
+        // $user = auth()->user();
+
+        // //  Rule 1: SuperAdmin must NEVER be scoped
+        // if ($user && method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
+        //     return; // Do NOT add FilterByDataScope at all
+        // }
+
+        // //  Rule 2: Only models with $scopeType are scoped
+        // if (property_exists(static::class, 'scopeType')) {
+        //     static::addGlobalScope(new \App\Models\Traits\FilterByDataScope());
+        // }
+    }
+
+    /**
+     * Get audit trail history
+     */
+    public function getHistory($limit = 50)
+    {
+        return $this->audits()
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get()
+            ->map(function ($audit) {
+                return [
+                    'id' => $audit->id,
+                    'event' => $audit->event,
+                    'user' => $audit->user?->name ?? 'System',
+                    'changes' => $audit->getModified(),
+                    'created_at' => $audit->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+    }
+
+    /**
+     * Register media collections for file uploads
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('documents')
+            ->acceptsMimeTypes(['application/pdf', 'image/jpeg', 'image/png', 'application/msword'])
+            ->useDisk('public');
+
+        $this->addMediaCollection('photos')
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/gif'])
+            ->useDisk('public');
+
+        $this->addMediaCollection('attachments')
+            ->useDisk('public');
+    }
+
+    /**
+     * Scope: Get only active records
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true)->whereNull('deleted_at');
+    }
+
+    /**
+     * Scope: Get only inactive records
+     */
+    public function scopeInactive($query)
+    {
+        return $query->where('is_active', false);
+    }
+
+    /**
+     * Scope: Get only deleted records
+     */
+    public function scopeDeleted($query)
+    {
+        return $query->whereNotNull('deleted_at');
+    }
+
+    /**
+     * Scope: Get all records including deleted (for admin)
+     */
+    public function scopeWithDeleted($query)
+    {
+        return $query->withTrashed();
+    }
+
+    /**
+     * Scope: Order by created date newest first
+     */
+    public function scopeNewest($query)
+    {
+        return $query->orderByDesc('created_at');
+    }
+
+    /**
+     * Scope: Order by created date oldest first
+     */
+    public function scopeOldest($query)
+    {
+        return $query->orderBy('created_at');
+    }
+}
+///////End-of-File : BaseModel.php
+
+File : User.php
+/////////Content of file User.php
+<?php
+
+namespace App\Models;
+
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use App\Models\Core\Employee;
+use App\Models\Core\Person;
+use App\Models\Core\UserType;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use OwenIt\Auditing\Contracts\Auditable;
+use OwenIt\Auditing\Auditable as AuditableTrait;
+use Spatie\Permission\Traits\HasRoles;
+use App\Models\Core\ReportingHierarchy;
+use App\Models\Core\ApprovalHierarchy;
+
+/**
+ * User Model
+ * 
+ * Application user authentication and authorization
+ * Extended with person linkage, employee linkage, role management, and hierarchical data scoping
+ */
+class User extends Authenticatable implements Auditable
+{
+    use HasFactory;
+    use Notifiable;
+    use HasApiTokens;
+    use HasRoles;
+    use SoftDeletes;
+    use AuditableTrait;
+    use CrudTrait;
+
+    protected $fillable = [
+        'person_id',
+        'employee_id',
+        'user_type_id',
+        'code',
+        'name',
+        'email',
+        'password',
+        'avatar',
+        'phone',
+        'is_active',
+        'last_login_at',
+        'email_verified_at',
+        'remember_token',
+        'mile_id',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+        'is_active' => 'boolean',
+        'last_login_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Guard for roles/permissions
+     */
+    protected $guard_name = 'web';
+
+    /**
+     * Boot: Auto-set audit fields
+     */
+    public static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (auth()->check() && !$model->created_by) {
+                $model->created_by = auth()->id();
+            }
+        });
+
+        static::updating(function ($model) {
+            if (auth()->check()) {
+                $model->updated_by = auth()->id();
+            }
+        });
+
+        static::deleting(function ($model) {
+            if (!$model->isForceDeleting()) {
+                if (auth()->check()) {
+                    $model->deleted_by = auth()->id();
+                    $model->save();
+                }
+            }
+        });
+    }
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║        EXISTING RELATIONSHIPS (Preserved)              ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    /**
+     * Relationship: Person record
+     */
+    public function person(): BelongsTo
+    {
+        return $this->belongsTo(Person::class);
+    }
+
+    /**
+     * Relationship: Employee record
+     */
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: User type
+     */
+    public function userType(): BelongsTo
+    {
+        return $this->belongsTo(UserType::class);
+    }
+
+    /**
+     * Relationship: Role assignments
+     */
+    public function roleAssignments()
+    {
+        return $this->hasMany(\App\Models\Core\UserRoleAssignment::class);
+    }
+
+    /**
+     * Relationship: Division assignments
+     */
+    public function divisionAssignments()
+    {
+        return $this->hasMany(\App\Models\Core\UserDivisionAssignment::class);
+    }
+
+    /**
+     * Relationship: Current roles
+     */
+    public function currentRoles()
+    {
+        return $this->roles()
+            ->whereIn('roles.id', function ($query) {
+                $query->selectRaw('role_id')
+                    ->from('user_role_assignments')
+                    ->where('user_id', $this->id)
+                    ->where('is_current', true)
+                    ->where(function ($q) {
+                        $q->whereNull('to_date')
+                            ->orWhere('to_date', '>=', now());
+                    });
+            });
+    }
+
+    /**
+     * Relationship: Current divisions
+     */
+    public function currentDivisions()
+    {
+        return $this->divisionAssignments()
+            ->where('is_current', true)
+            ->where(function ($q) {
+                $q->whereNull('to_date')
+                    ->orWhere('to_date', '>=', now());
+            });
+    }
+
+    /**
+     * Relationship: Enquiries
+     */
+    public function enquiries()
+    {
+        return $this->hasMany(Enquiry::class, 'mile_id');
+    }
+
+    /**
+     * Relationship: Quotes
+     */
+    public function quotes()
+    {
+        return $this->hasMany(Quote::class, 'mile_id');
+    }
+
+    /**
+     * Relationship: Bookings
+     */
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class, 'mile_id');
+    }
+
+    /**
+     * Relationship: Sales
+     */
+    public function sales()
+    {
+        return $this->hasMany(Sale::class, 'mile_id');
+    }
+
+    /**
+     * Relationship: GraphNode
+     */
+    public function graphNode()
+    {
+        return $this->hasOne(\App\Models\Core\GraphNode::class);
+    }
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║     NEW: HIERARCHICAL DATA SCOPING (Added Methods)     ║
+    // ║     Does NOT break any existing functionality           ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    /**
+     * Relationship: User's assigned data scopes
+     * 
+     * Table: user_data_scopes
+     * Stores: user_id, scope_type (branch|location|dept|etc), scope_value (ID or NULL for wildcard)
+     * 
+     * @return HasMany
+     */
+    public function userDataScopes(): HasMany
+    {
+        return $this->hasMany(\App\Models\UserDataScope::class);
+    }
+
+    /**
+     * Get active scopes only
+     * 
+     * @return HasMany
+     */
+    public function getActiveScopes(): HasMany
+    {
+        return $this->userDataScopes()->where('status', 'active');
+    }
+
+    /**
+     * Get user's scope access for a specific type
+     * 
+     * Returns:
+     *   null        → Wildcard (all instances of this type)
+     *   []          → No access to this type
+     *   [1, 5, 10]  → Specific IDs only
+     * 
+     * @param string $scopeType (branch, location, department, etc.)
+     * @return array|null
+     */
+    // User.php
+    public function getScopeAccess(string $scopeType): array|null
+    {
+        // Not strictly required anymore for scoping, but safe:
+        if ($this->isSuperAdmin()) {
+            return null; // wildcard, but scope will not be attached anyway
+        }
+
+        $scopes = $this->getActiveScopes()
+            ->where('scope_type', $scopeType)
+            ->pluck('scope_value')
+            ->all();
+
+        if (empty($scopes)) {
+            return [];          // no access for that type
+        }
+
+        if (in_array(null, $scopes, true)) {
+            return null;        // wildcard
+        }
+
+        return array_filter($scopes); // specific IDs
+    }
+
+
+    /**
+     * Check if user has access to specific entity
+     * SuperAdmin automatically has access to everything
+     * 
+     * @param string $scopeType
+     * @param int|null $entityId
+     * @return bool
+     */
+    public function hasAccessTo(string $scopeType, int|null $entityId = null): bool
+    {
+        // ✅ SuperAdmin has access to everything
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $allowedValues = $this->getScopeAccess($scopeType);
+
+        // No scope assigned = no access
+        if ($allowedValues === []) {
+            return false;
+        }
+
+        // Wildcard (null in database) = access to everything
+        if ($allowedValues === null) {
+            return true;
+        }
+
+        // Check if user's entity ID is in allowed list
+        if ($entityId === null) {
+            return false;
+        }
+
+        return in_array($entityId, $allowedValues);
+    }
+
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║        SCOPE ACCESS HELPERS (by entity type)           ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    /**
+     * Get all branch IDs user has access to
+     * @return array|null  → array of IDs, null for wildcard, empty for no access
+     */
+    public function getAccessibleBranches(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+
+        return $this->getScopeAccess('branch');
+    }
+
+    /**
+     * Get all location IDs user has access to
+     */
+    public function getAccessibleLocations(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('location');
+    }
+
+    /**
+     * Get all department IDs user has access to
+     */
+    public function getAccessibleDepartments(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('department');
+    }
+
+    /**
+     * Get all division IDs user has access to
+     */
+    public function getAccessibleDivisions(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('division');
+    }
+
+    /**
+     * Get all vertical IDs user has access to
+     */
+    public function getAccessibleVerticals(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('vertical');
+    }
+
+    /**
+     * Get all brand IDs user has access to
+     */
+    public function getAccessibleBrands(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('brand');
+    }
+
+    /**
+     * Get all segment IDs user has access to
+     */
+    public function getAccessibleSegments(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('segment');
+    }
+
+    /**
+     * Get all sub-segment IDs user has access to
+     */
+    public function getAccessibleSubSegments(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('sub_segment');
+    }
+
+    /**
+     * Get all vehicle model IDs user has access to
+     */
+    public function getAccessibleVehicleModels(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('vehicle_model');
+    }
+
+    /**
+     * Get all variant IDs user has access to
+     */
+    public function getAccessibleVariants(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('variant');
+    }
+
+    /**
+     * Get all color IDs user has access to
+     */
+    public function getAccessibleColors(): array|null
+    {
+        if ($this->isSuperAdmin()) {
+            return null;  // wildcard
+        }
+        return $this->getScopeAccess('color');
+    }
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║     EXISTING METHODS (Preserved & Enhanced)            ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    /**
+     * Get user scope (branches, departments, locations, etc.)
+     * 
+     * UPDATED: Now includes data scoping information
+     * BACKWARD COMPATIBLE: Existing logic still works
+     */
+    public function getScope()
+    {
+        if ($this->hasRole('super_admin|admin')) {
+            return [
+                'all_access' => true,
+            ];
+        }
+
+        if ($this->employee) {
+            $scope = $this->employee->getCurrentScope();
+
+            // Merge with data scopes if any
+            $dataScopes = [
+                'branches' => $this->getAccessibleBranches(),
+                'locations' => $this->getAccessibleLocations(),
+                'departments' => $this->getAccessibleDepartments(),
+                'divisions' => $this->getAccessibleDivisions(),
+                'verticals' => $this->getAccessibleVerticals(),
+                'brands' => $this->getAccessibleBrands(),
+                'segments' => $this->getAccessibleSegments(),
+            ];
+
+            return array_merge($scope, ['data_scopes' => $dataScopes]);
+        }
+
+        return [];
+    }
+
+    /**
+     * Check if user has all required permissions
+     */
+    public function hasAllPermissions($permissions)
+    {
+        if (is_string($permissions)) {
+            $permissions = [$permissions];
+        }
+
+        foreach ($permissions as $permission) {
+            if (!$this->hasPermissionTo($permission)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if user has any of the permissions
+     */
+    public function hasAnyPermission($permissions)
+    {
+        if (is_string($permissions)) {
+            $permissions = [$permissions];
+        }
+
+        foreach ($permissions as $permission) {
+            if ($this->hasPermissionTo($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if user is super admin
+     * UPDATED: Now supports both 'super_admin' and 'super-admin' naming conventions
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(['super_admin', 'super-admin', 'SuperAdmin']);
+    }
+
+    /**
+     * Check if user is sales consultant
+     */
+    public function isSalesConsultant(): bool
+    {
+        return $this->hasRole('Sales_Consultant');
+    }
+
+    /**
+     * Enhanced permission check with SuperAdmin bypass
+     * 
+     * SuperAdmin automatically gets true, others checked against permissions
+     */
+    public function can($abilities, $arguments = []): bool
+    {
+        // SuperAdmin bypass - can do anything
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        // Default: use parent class implementation (Spatie permissions)
+        return parent::can($abilities, $arguments);
+    }
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║         EXISTING SCOPES (Preserved)                    ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    /**
+     * Scope: Only active users
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true)->whereNull('deleted_at');
+    }
+
+    /**
+     * Scope: Only employees
+     */
+    public function scopeEmployees($query)
+    {
+        return $query->whereNotNull('employee_id');
+    }
+
+    /**
+     * Scope: Only admins
+     */
+    public function scopeAdmins($query)
+    {
+        return $query->whereHas('roles', function ($q) {
+            $q->whereIn('name', ['super_admin', 'admin']);
+        });
+    }
+
+    /**
+     * Scope: Search users
+     */
+    public function scopeSearch($query, $term)
+    {
+        return $query->where('name', 'like', "%{$term}%")
+            ->orWhere('email', 'like', "%{$term}%")
+            ->orWhere('code', 'like', "%{$term}%");
+    }
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║         EXISTING HELPER METHODS (Preserved)            ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    /**
+     * Update last login timestamp
+     */
+    public function recordLogin()
+    {
+        $this->update(['last_login_at' => now()]);
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode()
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return 'USR-' . str_pad($lastId + 1, 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Get user display name
+     */
+    public function getDisplayNameAttribute()
+    {
+        return $this->person?->display_name ?? $this->name;
+    }
+
+    /**
+     * Get user avatar URL
+     */
+    public function getAvatarUrlAttribute()
+    {
+        if ($this->avatar) {
+            return asset('storage/' . $this->avatar);
+        }
+
+        return asset('images/default-avatar.png');
+    }
+
+
+    // In User.php, add:
+    public function approvalHierarchies()
+    {
+        return $this->hasMany(ApprovalHierarchy::class, 'approver_id');
+    }
+
+    public function reportingHierarchies()
+    {
+        return $this->hasMany(ReportingHierarchy::class);
+    }
+
+    public function subordinates()
+    {
+        return $this->hasMany(ReportingHierarchy::class, 'supervisor_id');
+    }
+
+    // Performance aggregate
+    public function aggregatePerformance(string $topic, array $combo, string $metric, $from = null, $to = null): float
+    {
+        $reportingRoot = $this->reportingHierarchies()->where('topic', $topic)->whereJsonContains('combo_json', $combo)->first();
+        if (!$reportingRoot) return 0.0;
+
+        $userIds = $reportingRoot->getSubtreeUserIds($topic, $combo);
+
+        // Example for bookings (adapt for quotes/enquiries)
+        //$query = Booking::whereIn('created_by', $userIds)->where('topic', $topic)->whereJsonContains('combo_json', $combo);
+        // if ($from && $to) $query->whereBetween('created_at', [$from, $to]);
+
+        // return match ($metric) {
+        //     'count' => $query->count(),
+        //     'value' => $query->sum('amount'),
+        //     default => 0.0,
+        // };
+    }
+}
+///////End-of-File : User.php
+
+File : UserDataScope.php
+/////////Content of file UserDataScope.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+/**
+ * User Data Scope Model
+ * 
+ * Represents the scope of data a user can access
+ * 
+ * Example:
+ * user_id: 1, scope_type: 'branch', scope_value: 5
+ * = User 1 can access Branch 5
+ * 
+ * user_id: 1, scope_type: 'branch', scope_value: null
+ * = User 1 can access ALL branches (wildcard)
+ */
+class UserDataScope extends Model
+{
+    use SoftDeletes;
+
+    protected $table = 'user_data_scopes';
+
+    protected $fillable = [
+        'user_id',
+        'scope_type',
+        'scope_value',
+        'hierarchy_level',
+        'status',
+    ];
+
+    protected $casts = [
+        'hierarchy_level' => 'integer',
+        'scope_value' => 'integer',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: User
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Scope: Only active scopes
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active')->whereNull('deleted_at');
+    }
+
+    /**
+     * Scope: By scope type
+     */
+    public function scopeByType($query, string $type)
+    {
+        return $query->where('scope_type', $type);
+    }
+
+    /**
+     * Scope: By user
+     */
+    public function scopeForUser($query, int $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    /**
+     * Check if this scope is a wildcard (null = all instances)
+     */
+    public function isWildcard(): bool
+    {
+        return is_null($this->scope_value);
+    }
+
+    /**
+     * Get display name for scope
+     */
+    public function getDisplayName(): string
+    {
+        if ($this->isWildcard()) {
+            return "All {$this->scope_type}s";
+        }
+
+        $model = $this->getScopeModel();
+        $instance = $model::find($this->scope_value);
+
+        return $instance?->name ?? "Unknown {$this->scope_type}";
+    }
+
+    /**
+     * Get the model class for this scope type
+     */
+    private function getScopeModel(): string
+    {
+        return match ($this->scope_type) {
+            'branch' => Branch::class,
+            'location' => Location::class,
+            'department' => Department::class,
+            'vertical' => Vertical::class,
+            'segment' => Segment::class,
+            'brand' => Brand::class,
+            default => throw new \InvalidArgumentException("Unknown scope type: {$this->scope_type}"),
+        };
+    }
+}
+///////End-of-File : UserDataScope.php
+
+Folder : d:\xampp\htdocs\vdms\app\models\.\Core
+
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\app\models\.\Core
+
+File : AccountLock.php
+/////////Content of file AccountLock.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+
+class AccountLock extends BaseModel
+{
+    protected $fillable = [
+        'user_id',
+        'locked_until',
+        'reason',
+    ];
+}
+///////End-of-File : AccountLock.php
+
+File : ApprovalHierarchy.php
+/////////Content of file ApprovalHierarchy.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
+
+class ApprovalHierarchy extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = [
+        'approver_id',
+        'level',
+        'topic',
+        'combo_json',
+        'powers_json',
+        'is_active'
+    ];
+
+    protected $casts = [
+        'combo_json' => 'array',
+        'powers_json' => 'array',
+        'level' => 'integer',
+        'is_active' => 'boolean',
+    ];
+
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approver_id');
+    }
+
+    // Link to graph node
+    public function graphNode()
+    {
+        return $this->morphOne(GraphNode::class, 'nodeable');
+    }
+
+    // Initiate approval
+    public function initiate(array $data): bool
+    {
+        // Validate combo/powers
+        if (!$this->matchesCombo($data['combo'])) {
+            return false;
+        }
+        // Create graph path
+        $this->buildGraphPath();
+        // Notify approver
+        return true;
+    }
+
+    // Check combo match
+    protected function matchesCombo(array $queryCombo): bool
+    {
+        $combo = $this->combo_json ?? [];
+        foreach ($queryCombo as $key => $value) {
+            if (($combo[$key] ?? null) !== $value && ($combo[$key] ?? null) !== null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Build graph for levels
+    protected function buildGraphPath()
+    {
+        $start = GraphNode::create(['user_id' => auth()->id(), 'role' => 'initiator', 'attributes' => ['topic' => $this->topic, 'combo_json' => $this->combo_json]]);
+        $current = $start;
+        for ($i = 1; $i <= $this->level; $i++) {
+            $next = GraphNode::create(['user_id' => $this->approver_id, 'role' => "level_$i", 'attributes' => $this->powers_json]);
+            GraphEdge::create(['from_node_id' => $current->id, 'to_node_id' => $next->id, 'type' => 'approval', 'level' => $i, 'powers' => $this->powers_json]);
+            $current = $next;
+        }
+    }
+}
+///////End-of-File : ApprovalHierarchy.php
+
+File : Branch.php
+/////////Content of file Branch.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+use OpenApi\Attributes as OA;
+
+#[OA\Schema(title: 'Branch')]
+/**
+ * Branch Model
+ * 
+ * Represents company branches/offices
+ */
+class Branch extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'branches';
+    public $scopeType = 'branch';
+
+    protected $fillable = [
+        'code',
+        'name',
+        'short_name',
+        'description',
+        'phone',
+        'email',
+        'address',
+        'city',
+        'state',
+        'pincode',
+        'country',
+        'latitude',
+        'longitude',
+        'is_head_office',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_head_office' => 'boolean',
+        'is_active' => 'boolean',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Locations under this branch
+     */
+    public function locations()
+    {
+        return $this->hasMany(Location::class);
+    }
+
+    /**
+     * Relationship: Employees assigned to branch
+     */
+    public function employees()
+    {
+        return $this->belongsToMany(
+            Employee::class,
+            'employee_branch_assignments',
+            'branch_id',
+            'employee_id'
+        )->withPivot(['from_date', 'to_date', 'is_primary', 'is_current']);
+    }
+
+    /**
+     * Relationship: Departments
+     */
+    public function departments()
+    {
+        return $this->hasMany(Department::class);
+    }
+
+    /**
+     * Scope: Only head office
+     */
+    public function scopeHeadOffice($query)
+    {
+        return $query->where('is_head_office', true);
+    }
+
+    /**
+     * Scope: Get branches by city
+     */
+    public function scopeByCity($query, $city)
+    {
+        return $query->where('city', $city);
+    }
+
+    /**
+     * Scope: Get branches by state
+     */
+    public function scopeByState($query, $state)
+    {
+        return $query->where('state', $state);
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'BR')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Get full address
+     */
+    public function getFullAddressAttribute()
+    {
+        return "{$this->address}, {$this->city}, {$this->state} {$this->pincode}";
+    }
+}
+///////End-of-File : Branch.php
+
+File : Brand.php
+/////////Content of file Brand.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Brand extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['name', 'code', 'description', 'is_active'];
+    protected string $scopeType = 'brand';
+    //public $translatable = ['name', 'description'];
+
+    protected $columnTransformations = [
+        'code' => 'uppercase_alphanumeric_dash',
+    ];
+
+    public function segments()
+    {
+        return $this->hasMany(Segment::class);
+    }
+}
+///////End-of-File : Brand.php
+
+File : Color.php
+/////////Content of file Color.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Color extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['brand_id', 'segment_id', 'sub_segment_id', 'vehicle_model_id', 'name', 'code', 'hex_code', 'image', 'description', 'is_active'];
+    protected string $scopeType = 'color';
+    //public $translatable = ['name', 'description'];
+
+    protected $columnTransformations = [
+        'code' => 'uppercase_alphanumeric_dash',
+    ];
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function segment()
+    {
+        return $this->belongsTo(Segment::class);
+    }
+
+    public function subSegment()
+    {
+        return $this->belongsTo(SubSegment::class);
+    }
+
+    public function vehicleModel()
+    {
+        return $this->belongsTo(VehicleModel::class);
+    }
+
+    public function variants()
+    {
+        return $this->belongsToMany(Variant::class, 'variant_colors');
+    }
+}
+///////End-of-File : Color.php
+
+File : d
+/////////Content of file d
+///////End-of-File : d
+
+File : Department.php
+/////////Content of file Department.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use OpenApi\Attributes as OA;
+
+#[OA\Schema(title: 'Department')]
+/**
+ * Department Model
+ * 
+ * Represents organizational departments (Sales, HR, Finance, etc.)
+ */
+class Department extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'departments';
+    protected string $scopeType = 'department';
+    protected $fillable = [
+        'code',
+        'name',
+        'description',
+        'parent_department_id',
+        'branch_id',
+        'head_id',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Parent department (hierarchical)
+     */
+    public function parent()
+    {
+        return $this->belongsTo(self::class, 'parent_department_id');
+    }
+
+    /**
+     * Relationship: Child departments
+     */
+    public function children()
+    {
+        return $this->hasMany(self::class, 'parent_department_id');
+    }
+
+    /**
+     * Relationship: Department head (Person)
+     */
+    public function head()
+    {
+        return $this->belongsTo(Person::class, 'head_id');
+    }
+
+    /**
+     * Relationship: Branch
+     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    /**
+     * Relationship: Posts under department
+     */
+    public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    /**
+     * Relationship: Divisions
+     */
+    public function divisions()
+    {
+        return $this->hasMany(Division::class);
+    }
+
+    /**
+     * Relationship: Employees
+     */
+    public function employees()
+    {
+        return $this->belongsToMany(
+            Employee::class,
+            'employee_department_assignments',
+            'department_id',
+            'employee_id'
+        )->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Scope: Get top-level departments
+     */
+    public function scopeTopLevel($query)
+    {
+        return $query->whereNull('parent_department_id');
+    }
+
+    /**
+     * Scope: Get departments in specific branch
+     */
+    public function scopeInBranch($query, $branchId)
+    {
+        return $query->where('branch_id', $branchId);
+    }
+
+    /**
+     * Get all descendants (flat list)
+     */
+    public function getAllDescendants()
+    {
+        $descendants = collect();
+        foreach ($this->children as $child) {
+            $descendants->push($child);
+            $descendants = $descendants->merge($child->getAllDescendants());
+        }
+        return $descendants;
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'DEPT')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 3, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Department.php
+
+File : Designation.php
+/////////Content of file Designation.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Designation extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'designations';
+    protected string $scopeType = 'designation';
+    protected $fillable = [
+        'code',
+        'name',
+        'description',
+        'hierarchy_level',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'hierarchy_level' => 'integer',
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employees
+     */
+    public function employees()
+    {
+        return $this->hasMany(Employee::class);
+    }
+
+    /**
+     * Relationship: Posts
+     */
+    public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'DES')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 3, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Designation.php
+
+File : DeviceSession.php
+/////////Content of file DeviceSession.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+
+class DeviceSession extends BaseModel
+{
+    protected $fillable = [
+        'user_id',
+        'device_id',
+        'device_name',
+        'platform',
+        'last_active_at',
+    ];
+}
+///////End-of-File : DeviceSession.php
+
+File : Division.php
+/////////Content of file Division.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Division extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'divisions';
+
+    protected $fillable = [
+        'department_id',
+        'code',
+        'name',
+        'description',
+        'head_id',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Department
+     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Relationship: Head (Person)
+     */
+    public function head()
+    {
+        return $this->belongsTo(Person::class, 'head_id');
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($deptCode, $prefix = 'DIV')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $deptCode . '-' . $prefix . '-' . str_pad($lastId + 1, 3, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Division.php
+
+File : Employee.php
+/////////Content of file Employee.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Employee extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employees';
+
+    protected $fillable = [
+        'code',
+        'person_id',
+        'designation_id',
+        'primary_branch_id',
+        'primary_department_id',
+        'joining_date',
+        'resignation_date',
+        'employment_type',
+        'employment_status',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'joining_date' => 'date',
+        'resignation_date' => 'date',
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Person
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
+    }
+
+    /**
+     * Relationship: Designation
+     */
+    public function designation()
+    {
+        return $this->belongsTo(Designation::class);
+    }
+
+    /**
+     * Relationship: Primary Branch
+     */
+    public function primaryBranch()
+    {
+        return $this->belongsTo(Branch::class, 'primary_branch_id');
+    }
+
+    /**
+     * Relationship: Primary Department
+     */
+    public function primaryDepartment()
+    {
+        return $this->belongsTo(Department::class, 'primary_department_id');
+    }
+
+    /**
+     * Relationship: Branches
+     */
+    public function branches()
+    {
+        return $this->belongsToMany(Branch::class, 'employee_branch_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_primary', 'is_current']);
+    }
+
+    /**
+     * Relationship: Departments
+     */
+    public function departments()
+    {
+        return $this->belongsToMany(Department::class, 'employee_department_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Relationship: Locations
+     */
+    public function locations()
+    {
+        return $this->belongsToMany(Location::class, 'employee_location_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Relationship: Verticals
+     */
+    public function verticals()
+    {
+        return $this->belongsToMany(Vertical::class, 'employee_vertical_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Relationship: Posts
+     */
+    public function posts()
+    {
+        return $this->belongsToMany(Post::class, 'employee_post_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current', 'assignment_order']);
+    }
+
+    /**
+     * Get current scope (for RBAC filtering)
+     */
+    public function getCurrentScope()
+    {
+        return [
+            'branches' => $this->branches()->wherePivot('is_current', true)->pluck('branches.id')->toArray(),
+            'departments' => $this->departments()->wherePivot('is_current', true)->pluck('departments.id')->toArray(),
+            'locations' => $this->locations()->wherePivot('is_current', true)->pluck('locations.id')->toArray(),
+            'verticals' => $this->verticals()->wherePivot('is_current', true)->pluck('verticals.id')->toArray(),
+        ];
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'EMP')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 6, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Employee.php
+
+File : EmployeeBranchAssignment.php
+/////////Content of file EmployeeBranchAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class EmployeeBranchAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employee_branch_assignments';
+
+    protected $fillable = [
+        'employee_id',
+        'branch_id',
+        'from_date',
+        'to_date',
+        'is_primary',
+        'is_current',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_primary' => 'boolean',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employee
+     */
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: Branch
+     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+}
+///////End-of-File : EmployeeBranchAssignment.php
+
+File : EmployeeDepartmentAssignment.php
+/////////Content of file EmployeeDepartmentAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class EmployeeDepartmentAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employee_department_assignments';
+
+    protected $fillable = [
+        'employee_id',
+        'department_id',
+        'from_date',
+        'to_date',
+        'is_current',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employee
+     */
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: Department
+     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+}
+///////End-of-File : EmployeeDepartmentAssignment.php
+
+File : EmployeeLocationAssignment.php
+/////////Content of file EmployeeLocationAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class EmployeeLocationAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employee_location_assignments';
+
+    protected $fillable = [
+        'employee_id',
+        'location_id',
+        'branch_id',
+        'from_date',
+        'to_date',
+        'is_current',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employee
+     */
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: Location
+     */
+    public function location()
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    /**
+     * Relationship: Branch
+     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+}
+///////End-of-File : EmployeeLocationAssignment.php
+
+File : EmployeePostAssignment.php
+/////////Content of file EmployeePostAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class EmployeePostAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employee_post_assignments';
+
+    protected $fillable = [
+        'employee_id',
+        'post_id',
+        'from_date',
+        'to_date',
+        'assignment_order',
+        'is_current',
+        'remarks',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employee
+     */
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: Post
+     */
+    public function post()
+    {
+        return $this->belongsTo(Post::class);
+    }
+}
+///////End-of-File : EmployeePostAssignment.php
+
+File : EmployeeVerticalAssignment.php
+/////////Content of file EmployeeVerticalAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class EmployeeVerticalAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employee_vertical_assignments';
+
+    protected $fillable = [
+        'employee_id',
+        'vertical_id',
+        'from_date',
+        'to_date',
+        'is_current',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employee
+     */
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Relationship: Vertical
+     */
+    public function vertical()
+    {
+        return $this->belongsTo(Vertical::class);
+    }
+}
+///////End-of-File : EmployeeVerticalAssignment.php
+
+File : Garage.php
+/////////Content of file Garage.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Garage extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'garages';
+
+    protected $fillable = [
+        'person_id',
+        'name',
+        'type',
+        'address',
+        'city',
+        'state',
+        'pincode',
+        'latitude',
+        'longitude',
+        'contact_person',
+        'mobile',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Person
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
+    }
+}
+///////End-of-File : Garage.php
+
+File : GraphEdge.php
+/////////Content of file GraphEdge.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class GraphEdge extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['from_node_id', 'to_node_id', 'type', 'level', 'powers'];
+
+    protected $casts = ['powers' => 'array'];
+
+    public function fromNode()
+    {
+        return $this->belongsTo(GraphNode::class, 'from_node_id');
+    }
+
+    public function toNode()
+    {
+        return $this->belongsTo(GraphNode::class, 'to_node_id');
+    }
+
+    // Match topic/combo
+    public function matches(string $topic, array $queryCombo): bool
+    {
+        if ($this->powers['topic'] ?? '' !== $topic) return false;
+        $edgeCombo = $this->powers['combo_json'] ?? [];
+        foreach ($queryCombo as $k => $v) {
+            if (($edgeCombo[$k] ?? null) !== $v && ($edgeCombo[$k] ?? null) !== null) return false;
+        }
+        return true;
+    }
+}
+///////End-of-File : GraphEdge.php
+
+File : GraphNode.php
+/////////Content of file GraphNode.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
+
+class GraphNode extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['user_id', 'role', 'attributes'];
+
+    protected $casts = ['attributes' => 'array'];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function outgoingEdges()
+    {
+        return $this->hasMany(GraphEdge::class, 'from_node_id');
+    }
+
+    public function incomingEdges()
+    {
+        return $this->hasMany(GraphEdge::class, 'to_node_id');
+    }
+
+    // Polymorphic for ApprovalHierarchy
+    public function nodeable()
+    {
+        return $this->morphTo();
+    }
+
+    // Get subtree for topic/combo
+    public function getSubtree(string $topic, array $combo): array
+    {
+        $subtree = [$this];
+        foreach ($this->outgoingEdges as $edge) {
+            if ($edge->matches($topic, $combo)) {
+                $subtree = array_merge($subtree, $edge->toNode->getSubtree($topic, $combo));
+            }
+        }
+        return $subtree;
+    }
+
+    // Get subtree user IDs
+    public function getSubtreeUserIds(string $topic, array $combo): array
+    {
+        return collect($this->getSubtree($topic, $combo))->pluck('user_id')->unique()->toArray();
+    }
+}
+///////End-of-File : GraphNode.php
+
+File : Keyvalue.php
+/////////Content of file Keyvalue.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Traits\HasTreeStructure;
+
+class Keyvalue extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    use HasTreeStructure;
+    protected $fillable = [
+        'keyword_master_id',
+        'key',
+        'value',
+        'details',
+        'parent_id',
+        'level',
+        'extra_data',
+        'status'
+    ];
+
+    protected $casts = [
+        'extra_data' => 'array',
+        'level' => 'integer',
+        'status' => 'integer',
+    ];
+
+    public function keywordMaster()
+    {
+        return $this->belongsTo(KeywordMaster::class);
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(self::class, 'parent_id');
+    }
+
+    public function registerMediaCollections(): void
+    {
+        parent::registerMediaCollections();
+        $this->addMediaCollection('attachments')
+            ->singleFile() // Or multiple if needed
+            ->useDisk('public');
+    }
+
+    public static function getEnum(string $keyword, bool $activeOnly = true, bool $recursive = false): array
+    {
+        $master = KeywordMaster::where('keyword', $keyword)->first();
+        if (!$master) return [];
+
+        $query = self::where('keyword_master_id', $master->id);
+        if ($activeOnly) $query->where('status', 1);
+
+        if ($recursive) {
+            return $query->with('children')->whereNull('parent_id')->get()->toArray();
+        }
+        return $query->pluck('value', 'key')->toArray();
+    }
+
+    public static function getKeywordId(string $keyword): ?int
+    {
+        return KeywordMaster::where('keyword', $keyword)->value('id');
+    }
+
+    public static function getValueId(string $keyword, string $valKey): ?int
+    {
+        $masterId = self::getKeywordId($keyword);
+        return self::where('keyword_master_id', $masterId)->where('key', $valKey)->value('id');
+    }
+
+    public function scopeForKeyword($query, string $keyword)
+    {
+        $masterId = self::getKeywordId($keyword);
+        return $query->where('keyword_master_id', $masterId);
+    }
+
+    public function scopeRoots($query)
+    {
+        return $query->whereNull('parent_id');
+    }
+}
+///////End-of-File : Keyvalue.php
+
+File : KeywordMaster.php
+/////////Content of file KeywordMaster.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class KeywordMaster extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['keyword', 'details', 'extra_data', 'status'];
+
+    protected $casts = [
+        'extra_data' => 'array',
+        'status' => 'integer',
+    ];
+
+    public function keyvalues()
+    {
+        return $this->hasMany(Keyvalue::class);
+    }
+
+    public function scopeByKeyword($query, string $keyword)
+    {
+        return $query->where('keyword', $keyword);
+    }
+
+    // DO NOT use HasTreeStructure here!
+}
+///////End-of-File : KeywordMaster.php
+
+File : Location.php
+/////////Content of file Location.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Location extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'locations';
+    public $scopeType = 'location';
+    protected $fillable = [
+        'branch_id',
+        'code',
+        'name',
+        'description',
+        'phone',
+        'email',
+        'address',
+        'city',
+        'state',
+        'pincode',
+        'latitude',
+        'longitude',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Branch
+     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    /**
+     * Relationship: Employees
+     */
+    public function employees()
+    {
+        return $this->belongsToMany(Employee::class, 'employee_location_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($branchCode, $prefix = 'LOC')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $branchCode . '-' . $prefix . '-' . str_pad($lastId + 1, 3, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Location.php
+
+File : Module.php
+/////////Content of file Module.php
+<?php
+
+namespace App\Models\Core;
+
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\BaseModel;
+
+class Module extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['name', 'code', 'description', 'is_active'];
+
+    public function processes()
+    {
+        return $this->hasMany(Process::class);
+    }
+}
+///////End-of-File : Module.php
+
+File : OtpAttemptLog.php
+/////////Content of file OtpAttemptLog.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+
+class OtpAttemptLog extends BaseModel
+{
+    protected $fillable = [
+        'user_id',
+        'mobile',
+        'action',
+        'ip_address',
+        'user_agent',
+        'reason',
+    ];
+}
+///////End-of-File : OtpAttemptLog.php
+
+File : OtpToken.php
+/////////Content of file OtpToken.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+
+class OtpToken extends BaseModel
+{
+    protected $fillable = [
+        'user_id',
+        'otp_hash',
+        'mobile',
+        'expires_at',
+    ];
+}
+///////End-of-File : OtpToken.php
+
+File : Permission.php
+/////////Content of file Permission.php
+<?php
+
+namespace App\Models\Core;
+
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+use Spatie\Permission\Models\Permission as SpatiePermission;
+
+class Permission extends SpatiePermission
+{
+    use CrudTrait;
+    use HasFactory;
+    // Add relations
+    public function module()
+    {
+        return $this->belongsTo(Module::class);
+    }
+
+    public function process()
+    {
+        return $this->belongsTo(Process::class);
+    }
+}
+///////End-of-File : Permission.php
+
+File : Person.php
+/////////Content of file Person.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User; 
+
+class Person extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'persons';
+
+    protected $fillable = [
+        'code',
+        'salutation',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'display_name',
+        'gender',
+        'dob',
+        'marital_status',
+        'spouse_name',
+        'occupation',
+        'aadhaar_no',
+        'pan_no',
+        'gst_no',
+        'mobile_primary',
+        'mobile_secondary',
+        'email_primary',
+        'email_secondary',
+        'extra_data',
+    ];
+
+    protected $casts = [
+        'dob' => 'date',
+        'extra_data' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Addresses
+     */
+    public function addresses()
+    {
+        return $this->hasMany(PersonAddress::class);
+    }
+
+    /**
+     * Relationship: Contacts
+     */
+    public function contacts()
+    {
+        return $this->hasMany(PersonContact::class);
+    }
+
+    /**
+     * Relationship: Banking details
+     */
+    public function bankingDetails()
+    {
+        return $this->hasMany(PersonBankingDetail::class);
+    }
+
+    /**
+     * Relationship: Garages
+     */
+    public function garages()
+    {
+        return $this->hasMany(Garage::class);
+    }
+
+    /**
+     * Relationship: Employee record (if person is employee)
+     */
+    public function employee()
+    {
+        return $this->hasOne(Employee::class);
+    }
+
+    /**
+     * Relationship: User record (if person has login)
+     */
+    public function user()
+    {
+        return $this->hasOne(User::class);
+    }
+
+    /**
+     * Relationship: Department heads
+     */
+    public function headedDepartments()
+    {
+        return $this->hasMany(Department::class, 'head_id');
+    }
+
+    /**
+     * Relationship: Division heads
+     */
+    public function headedDivisions()
+    {
+        return $this->hasMany(Division::class, 'head_id');
+    }
+
+    /**
+     * Scope: Search persons
+     */
+    public function scopeSearch($query, $term)
+    {
+        return $query->where('first_name', 'like', "%{$term}%")
+            ->orWhere('last_name', 'like', "%{$term}%")
+            ->orWhere('display_name', 'like', "%{$term}%")
+            ->orWhere('email_primary', 'like', "%{$term}%")
+            ->orWhere('mobile_primary', 'like', "%{$term}%");
+    }
+
+    /**
+     * Get full name
+     */
+    public function getFullNameAttribute()
+    {
+        return trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+    }
+
+    /**
+     * Get primary contact
+     */
+    public function getPrimaryContactAttribute()
+    {
+        return $this->contacts()
+            ->where('is_primary', true)
+            ->first() ?? $this->contacts()->first();
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode()
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return 'PERS-' . str_pad($lastId + 1, 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Register media collections
+     */
+    public function registerMediaCollections(): void
+    {
+        parent::registerMediaCollections();
+
+        $this->addMediaCollection('identity_documents')
+            ->acceptsMimeTypes(['application/pdf', 'image/jpeg', 'image/png'])
+            ->useDisk('public');
+
+        $this->addMediaCollection('profile_photos')
+            ->acceptsMimeTypes(['image/jpeg', 'image/png'])
+            ->useDisk('public');
+    }
+}
+///////End-of-File : Person.php
+
+File : PersonAddress.php
+/////////Content of file PersonAddress.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+/**
+ * PersonAddress Model
+ * 
+ * Multiple addresses for a person (Residential, Office, Billing, etc.)
+ */
+class PersonAddress extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'person_addresses';
+
+    protected $fillable = [
+        'person_id',
+        'type',
+        'address_line_1',
+        'address_line_2',
+        'city',
+        'state',
+        'pincode',
+        'country',
+        'latitude',
+        'longitude',
+        'is_primary',
+        'notes',
+    ];
+
+    protected $casts = [
+        'is_primary' => 'boolean',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Person
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
+    }
+
+    /**
+     * Scope: Get by type
+     */
+    public function scopeByType($query, $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    /**
+     * Scope: Get primary address
+     */
+    public function scopePrimary($query)
+    {
+        return $query->where('is_primary', true)->first();
+    }
+
+    /**
+     * Get full address string
+     */
+    public function getFullAddressAttribute()
+    {
+        $address = $this->address_line_1;
+        if ($this->address_line_2) {
+            $address .= ", {$this->address_line_2}";
+        }
+        $address .= ", {$this->city}, {$this->state} {$this->pincode}";
+        return $address;
+    }
+}
+///////End-of-File : PersonAddress.php
+
+File : PersonBankingDetail.php
+/////////Content of file PersonBankingDetail.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+/**
+ * PersonBankingDetail Model
+ * 
+ * Bank account information for persons
+ */
+class PersonBankingDetail extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'person_banking_details';
+
+    protected $fillable = [
+        'person_id',
+        'bank_name',
+        'account_holder_name',
+        'account_number',
+        'ifsc_code',
+        'account_type',
+        'branch_name',
+        'swift_code',
+        'is_primary',
+        'is_verified',
+        'verified_at',
+    ];
+
+    protected $casts = [
+        'is_primary' => 'boolean',
+        'is_verified' => 'boolean',
+        'verified_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Person
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
+    }
+
+    /**
+     * Scope: Only verified accounts
+     */
+    public function scopeVerified($query)
+    {
+        return $query->where('is_verified', true);
+    }
+
+    /**
+     * Scope: Get primary bank
+     */
+    public function scopePrimary($query)
+    {
+        return $query->where('is_primary', true)->first();
+    }
+
+    /**
+     * Get masked account number
+     */
+    public function getMaskedAccountAttribute()
+    {
+        $number = $this->account_number;
+        return substr_replace($number, '****', 2, -4);
+    }
+}
+///////End-of-File : PersonBankingDetail.php
+
+File : PersonContact.php
+/////////Content of file PersonContact.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+/**
+ * PersonContact Model
+ * 
+ * Emergency and reference contacts for a person
+ */
+class PersonContact extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'person_contacts';
+
+    protected $fillable = [
+        'person_id',
+        'type',
+        'name',
+        'mobile',
+        'email',
+        'relationship',
+        'notes',
+        'is_primary',
+    ];
+
+    protected $casts = [
+        'is_primary' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Person
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
+    }
+
+    /**
+     * Scope: Get by type
+     */
+    public function scopeByType($query, $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    /**
+     * Scope: Emergency contacts
+     */
+    public function scopeEmergency($query)
+    {
+        return $query->where('type', 'emergency');
+    }
+}
+///////End-of-File : PersonContact.php
+
+File : Post.php
+/////////Content of file Post.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Employee extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'employees';
+
+    protected $fillable = [
+        'code',
+        'person_id',
+        'designation_id',
+        'primary_branch_id',
+        'primary_department_id',
+        'joining_date',
+        'resignation_date',
+        'employment_type',
+        'employment_status',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'joining_date' => 'date',
+        'resignation_date' => 'date',
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Person
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
+    }
+
+    /**
+     * Relationship: Designation
+     */
+    public function designation()
+    {
+        return $this->belongsTo(Designation::class);
+    }
+
+    /**
+     * Relationship: Primary Branch
+     */
+    public function primaryBranch()
+    {
+        return $this->belongsTo(Branch::class, 'primary_branch_id');
+    }
+
+    /**
+     * Relationship: Primary Department
+     */
+    public function primaryDepartment()
+    {
+        return $this->belongsTo(Department::class, 'primary_department_id');
+    }
+
+    /**
+     * Relationship: Branches
+     */
+    public function branches()
+    {
+        return $this->belongsToMany(Branch::class, 'employee_branch_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_primary', 'is_current']);
+    }
+
+    /**
+     * Relationship: Departments
+     */
+    public function departments()
+    {
+        return $this->belongsToMany(Department::class, 'employee_department_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Relationship: Locations
+     */
+    public function locations()
+    {
+        return $this->belongsToMany(Location::class, 'employee_location_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Relationship: Verticals
+     */
+    public function verticals()
+    {
+        return $this->belongsToMany(Vertical::class, 'employee_vertical_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Relationship: Posts
+     */
+    public function posts()
+    {
+        return $this->belongsToMany(Post::class, 'employee_post_assignments')
+            ->withPivot(['from_date', 'to_date', 'is_current', 'assignment_order']);
+    }
+
+    /**
+     * Get current scope (for RBAC filtering)
+     */
+    public function getCurrentScope()
+    {
+        return [
+            'branches' => $this->branches()->wherePivot('is_current', true)->pluck('branches.id')->toArray(),
+            'departments' => $this->departments()->wherePivot('is_current', true)->pluck('departments.id')->toArray(),
+            'locations' => $this->locations()->wherePivot('is_current', true)->pluck('locations.id')->toArray(),
+            'verticals' => $this->verticals()->wherePivot('is_current', true)->pluck('verticals.id')->toArray(),
+        ];
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'EMP')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 6, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Post.php
+
+File : PostPermission.php
+/////////Content of file PostPermission.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User; 
+
+/**
+ * PostPermission Model
+ * 
+ * Links permissions to posts for RBAC
+ */
+class PostPermission extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'post_permissions';
+
+    protected $fillable = [
+        'post_id',
+        'permission_id',
+        'granted_by',
+        'granted_at',
+    ];
+
+    protected $casts = [
+        'granted_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Post
+     */
+    public function post()
+    {
+        return $this->belongsTo(Post::class);
+    }
+
+    /**
+     * Relationship: Permission
+     */
+    public function permission()
+    {
+        return $this->belongsTo(\Spatie\Permission\Models\Permission::class);
+    }
+
+    /**
+     * Relationship: User who granted
+     */
+    public function grantedBy()
+    {
+        return $this->belongsTo(User::class, 'granted_by');
+    }
+}
+///////End-of-File : PostPermission.php
+
+File : Process.php
+/////////Content of file Process.php
+<?php
+
+namespace App\Models\Core;
+
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Process extends Model
+{
+    use CrudTrait;
+    use HasFactory;
+
+    protected $fillable = ['module_id', 'name', 'code', 'description', 'is_active'];
+
+    public function module()
+    {
+        return $this->belongsTo(Module::class);
+    }
+}
+///////End-of-File : Process.php
+
+File : ReportingHierarchy.php
+/////////Content of file ReportingHierarchy.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User;
+use Kalnoy\Nestedset\NodeTrait; // Install baum/baum for NestedSet
+
+class ReportingHierarchy extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    use NodeTrait;
+
+    protected $fillable = [
+        'user_id',
+        'supervisor_id',
+        'topic',
+        'combo_json',
+        'is_active'
+    ];
+
+    protected $casts = [
+        'combo_json' => 'array',
+        'is_active' => 'boolean',
+    ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function supervisor()
+    {
+        return $this->belongsTo(User::class, 'supervisor_id');
+    }
+
+    // Get subtree user IDs for topic/combo
+    public function getSubtreeUserIds(string $topic, array $combo): array
+    {
+        return $this->descendantsAndSelf()
+            ->where('topic', $topic)
+            ->whereJsonContains('combo_json', $combo)
+            ->pluck('user_id')
+            ->unique()
+            ->toArray();
+    }
+}
+///////End-of-File : ReportingHierarchy.php
+
+File : Role.php
+/////////Content of file Role.php
+<?php
+
+namespace App\Models\Core;
+
+use Spatie\Permission\Models\Role as SpatieRole;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+class Role extends SpatieRole
+{
+    use CrudTrait;
+
+    protected $table = 'roles';
+    protected $guarded = [];
+
+    // Optional: Add any custom methods here
+
+    /**
+     * Get users with this role
+     */
+    public function users(): BelongsToMany
+    {
+        return $this->morphedByMany(
+            config('auth.providers.users.model'),
+            'model',
+            'model_has_roles',
+            'role_id',
+            'model_id'
+        );
+    }
+
+    /**
+     * Custom scope: Get active roles
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Get permission count
+     */
+    public function getPermissionsCountAttribute()
+    {
+        return $this->permissions()->count();
+    }
+}
+///////End-of-File : Role.php
+
+File : Segment.php
+/////////Content of file Segment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class Segment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['brand_id', 'name', 'code', 'description', 'is_active'];
+
+    public $translatable = ['name', 'description'];
+
+    protected $columnTransformations = [
+        'code' => 'uppercase_alphanumeric_dash',
+    ];
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function subSegments()
+    {
+        return $this->hasMany(SubSegment::class);
+    }
+
+    public function vehicleModels()
+    {
+        return $this->hasMany(VehicleModel::class);
+    }
+
+    public function variants()
+    {
+        return $this->hasMany(Variant::class);
+    }
+}
+///////End-of-File : Segment.php
+
+File : SubSegment.php
+/////////Content of file SubSegment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class SubSegment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['segment_id', 'name', 'code', 'description', 'is_active'];
+
+    public $translatable = ['name', 'description'];
+
+    protected $columnTransformations = [
+        'code' => 'uppercase_alphanumeric_dash',
+    ];
+
+    public function segment()
+    {
+        return $this->belongsTo(Segment::class);
+    }
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class, 'brand_id');
+    }
+
+    public function vehicleModels()
+    {
+        return $this->hasMany(VehicleModel::class);
+    }
+
+    public function variants()
+    {
+        return $this->hasMany(Variant::class);
+    }
+}
+///////End-of-File : SubSegment.php
+
+File : SystemSetting.php
+/////////Content of file SystemSetting.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Cache;
+
+/**
+ * SystemSetting Model
+ * 
+ * Stores application configuration settings
+ * Cached for performance optimization
+ */
+class SystemSetting extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'system_settings';
+
+    protected $fillable = [
+        'key',
+        'value',
+        'type',
+        'description',
+        'is_editable',
+    ];
+
+    protected $casts = [
+        'is_editable' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    /**
+     * Boot: Clear cache when setting is updated
+     */
+    public static function boot()
+    {
+        parent::boot();
+
+        static::saved(function ($model) {
+            Cache::forget("setting.{$model->key}");
+        });
+
+        static::deleted(function ($model) {
+            Cache::forget("setting.{$model->key}");
+        });
+    }
+
+    /**
+     * Get setting value with type casting
+     */
+    public static function getValue($key, $default = null)
+    {
+        $setting = Cache::rememberForever("setting.{$key}", function () use ($key) {
+            return self::where('key', $key)->first();
+        });
+
+        if (!$setting) {
+            return $default;
+        }
+
+        return match ($setting->type) {
+            'boolean' => filter_var($setting->value, FILTER_VALIDATE_BOOLEAN),
+            'integer' => (int) $setting->value,
+            'float' => (float) $setting->value,
+            'array' => json_decode($setting->value, true) ?? [],
+            'json' => json_decode($setting->value, true) ?? [],
+            default => $setting->value,
+        };
+    }
+
+    /**
+     * Scope: Get only editable settings
+     */
+    public function scopeEditable($query)
+    {
+        return $query->where('is_editable', true);
+    }
+
+    /**
+     * Scope: Get settings by type
+     */
+    public function scopeByType($query, $type)
+    {
+        return $query->where('type', $type);
+    }
+}
+///////End-of-File : SystemSetting.php
+
+File : UserDivisionAssignment.php
+/////////Content of file UserDivisionAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User; 
+
+/**
+ * UserDivisionAssignment Model
+ * 
+ * Links users to divisions for access control
+ */
+class UserDivisionAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'user_division_assignments';
+
+    protected $fillable = [
+        'user_id',
+        'division_id',
+        'from_date',
+        'to_date',
+        'is_current',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: User
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Relationship: Division
+     */
+    public function division()
+    {
+        return $this->belongsTo(Division::class);
+    }
+
+    /**
+     * Scope: Current assignments
+     */
+    public function scopeCurrent($query)
+    {
+        return $query->where('is_current', true);
+    }
+}
+///////End-of-File : UserDivisionAssignment.php
+
+File : UserRoleAssignment.php
+/////////Content of file UserRoleAssignment.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User; 
+
+/**
+ * UserRoleAssignment Model
+ * 
+ * Links users to roles with date validity support
+ * Allows users to have multiple roles
+ */
+class UserRoleAssignment extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'user_role_assignments';
+
+    protected $fillable = [
+        'user_id',
+        'role_id',
+        'from_date',
+        'to_date',
+        'is_current',
+        'remarks',
+    ];
+
+    protected $casts = [
+        'from_date' => 'date',
+        'to_date' => 'date',
+        'is_current' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: User
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Relationship: Role
+     */
+    public function role()
+    {
+        return $this->belongsTo(\Spatie\Permission\Models\Role::class);
+    }
+
+    /**
+     * Scope: Current roles
+     */
+    public function scopeCurrent($query)
+    {
+        return $query->where('is_current', true)
+            ->where(function ($q) {
+                $q->whereNull('to_date')
+                    ->orWhere('to_date', '>=', now());
+            });
+    }
+}
+///////End-of-File : UserRoleAssignment.php
+
+File : UserType.php
+/////////Content of file UserType.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\User; 
+
+/**
+ * UserType Model
+ * 
+ * Types of users in system (Admin, Employee, Customer, Vendor, etc.)
+ */
+class UserType extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'user_types';
+
+    protected $fillable = [
+        'code',
+        'display_name',
+        'description',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Users of this type
+     */
+    public function users()
+    {
+        return $this->hasMany(User::class);
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'UT')
+    {
+        $lastId = self::max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 2, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : UserType.php
+
+File : Variant.php
+/////////Content of file Variant.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Helpers\KeywordHelper;
+
+class Variant extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = [
+        'brand_id',
+        'segment_id',
+        'sub_segment_id',
+        'vehicle_model_id',
+        'name',
+        'custom_name',
+        'oem_code',
+        'description',
+        'permit_id',
+        'fuel_type_id',
+        'seating_capacity',
+        'wheels',
+        'gvw',
+        'cc_capacity',
+        'body_type_id',
+        'body_make_id',
+        'is_csd',
+        'csd_index',
+        'status_id',
+        'is_active'
+    ];
+
+    // public $translatable = ['name', 'custom_name', 'description'];
+
+    protected $columnTransformations = [
+        'oem_code' => 'uppercase_alphanumeric_dash',
+    ];
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function segment()
+    {
+        return $this->belongsTo(Segment::class);
+    }
+
+    public function subSegment()
+    {
+        return $this->belongsTo(SubSegment::class);
+    }
+
+    public function vehicleModel()
+    {
+        return $this->belongsTo(VehicleModel::class);
+    }
+
+    public function colors()
+    {
+        return $this->belongsToMany(Color::class, 'variant_colors');
+    }
+    public function permit()
+    {
+        return $this->belongsTo(Keyvalue::class, 'permit_id');
+    }
+
+    public function fuelType()
+    {
+        return $this->belongsTo(Keyvalue::class, 'fuel_type_id');
+    }
+
+    public function bodyType()
+    {
+        return $this->belongsTo(Keyvalue::class, 'body_type_id');
+    }
+
+    public function bodyMake()
+    {
+        return $this->belongsTo(Keyvalue::class, 'body_make_id');
+    }
+
+    public function statusKkv()
+    {
+        return $this->belongsTo(Keyvalue::class, 'status_id');
+    }
+    // Get options from helper
+    public static function getPermitOptions(): array
+    {
+        return KeywordHelper::options('permit');
+    }
+
+    public static function getFuelTypeOptions(): array
+    {
+        return KeywordHelper::options('fuel_type');
+    }
+
+    public static function getBodyTypeOptions(): array
+    {
+        return KeywordHelper::options('body_type');
+    }
+
+    public static function getBodyMakeOptions(): array
+    {
+        return KeywordHelper::options('body_make');
+    }
+
+    public static function getStatusOptions(): array
+    {
+        return KeywordHelper::options('vehicle_status');
+    }
+}
+///////End-of-File : Variant.php
+
+File : VehicleModel.php
+/////////Content of file VehicleModel.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+class VehicleModel extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $fillable = ['brand_id', 'segment_id', 'sub_segment_id', 'name', 'custom_name', 'oem_code', 'description', 'is_active'];
+
+    // public $translatable = ['name', 'custom_name', 'description'];
+
+    protected $columnTransformations = [
+        'oem_code' => 'uppercase_alphanumeric_dash',
+    ];
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function segment()
+    {
+        return $this->belongsTo(Segment::class);
+    }
+
+    public function subSegment()
+    {
+        return $this->belongsTo(SubSegment::class);
+    }
+
+    public function variants()
+    {
+        return $this->hasMany(Variant::class);
+    }
+}
+///////End-of-File : VehicleModel.php
+
+File : Vertical.php
+/////////Content of file Vertical.php
+<?php
+
+namespace App\Models\Core;
+
+use App\Models\BaseModel;
+use Backpack\CRUD\app\Models\Traits\CrudTrait;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+/**
+ * Vertical Model
+ * 
+ * Business segments (Personal, Commercial, Fleet, etc.)
+ */
+class Vertical extends BaseModel
+{
+    use CrudTrait;
+    use HasFactory;
+    protected $table = 'verticals';
+
+    protected $fillable = [
+        'code',
+        'name',
+        'description',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
+
+    /**
+     * Relationship: Employee assignments
+     */
+    public function employees()
+    {
+        return $this->belongsToMany(
+            Employee::class,
+            'employee_vertical_assignments',
+            'vertical_id',
+            'employee_id'
+        )->withPivot(['from_date', 'to_date', 'is_current']);
+    }
+
+    /**
+     * Generate auto code
+     */
+    public static function generateCode($prefix = 'VER')
+    {
+        $lastId = self::withTrashed()->max('id') ?? 0;
+        return $prefix . '-' . str_pad($lastId + 1, 2, '0', STR_PAD_LEFT);
+    }
+}
+///////End-of-File : Vertical.php
+
+Folder : d:\xampp\htdocs\vdms\app\models\.\Scopes
+
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\app\models\.\Scopes
+
+Folder : d:\xampp\htdocs\vdms\app\models\.\Traits
+
+-------------Begin file-----------------
+Listing of Folder d:\xampp\htdocs\vdms\app\models\.\Traits
+
+File : d
+/////////Content of file d
+///////End-of-File : d
+
+File : GraphTraversalTrait.php
+/////////Content of file GraphTraversalTrait.php
+<?php
+
+namespace App\Models\Traits;
+
+use Graphp\Graph\Graph;
+use Graphp\Algorithms\BreadthFirstSearch;
+use Illuminate\Support\Facades\Cache;
+use App\Models\User;
+
+trait GraphTraversalTrait
+{
+    public function traverseForUser(User $user, ?string $type = null, ?string $attribute = null): array
+    {
+        if (!config('app.rbac_graph')) {
+            return [];
+        }
+
+        $cacheKey = "user_graph_{$user->id}_{$type}_{$attribute}";
+        return Cache::remember($cacheKey, 60, function () use ($user, $type, $attribute) {
+            $graph = new Graph();
+            $nodes = \App\Models\Core\GraphNode::with('outgoingEdges', 'incomingEdges')->get();
+            foreach ($nodes as $node) {
+                $vertex = $graph->createVertex(['id' => $node->id, 'attributes' => json_decode($node->attributes, true)]);
+                foreach ($node->outgoingEdges as $edge) {
+                    $toVertex = $graph->getVertex($edge->to_node_id);
+                    $graph->createEdgeDirected($vertex, $toVertex, ['type' => $edge->type, 'level' => $edge->level]);
+                }
+            }
+
+            $start = $graph->getVertex($user->graphNode->id);
+            $algo = new BreadthFirstSearch($start);
+            $visited = $algo->getVertices();
+
+            $result = [];
+            foreach ($visited as $vertex) {
+                $attrs = $vertex->getAttribute('attributes');
+                if ($attribute) {
+                    $result = array_merge($result, $attrs[$attribute] ?? []);
+                } else if ($type && $vertex->hasEdgesOutWithAttribute('type', $type)) {
+                    $result[] = $vertex->getId();
+                }
+            }
+
+            return array_unique($result);
+        });
+    }
+}
+///////End-of-File : GraphTraversalTrait.php
+
+File : HasAuditFields.php
+/////////Content of file HasAuditFields.php
+<?php
+
+namespace App\Models\Traits;
+
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+/**
+ * Trait HasAuditFields
+ * 
+ * Adds automatic tracking of who created, updated, and deleted records
+ * 
+ * @property int|null $created_by
+ * @property int|null $updated_by
+ * @property int|null $deleted_by
+ */
+trait HasAuditFields
+{
+    protected static function bootHasAuditFields(): void
+    {
+        // Automatically set created_by and updated_by on creation
+        static::creating(function ($model) {
+            if (auth()->check() && !$model->created_by) {
+                $model->created_by = auth()->id();
+            }
+
+            if (auth()->check() && !$model->updated_by) {
+                $model->updated_by = auth()->id();
+            }
+        });
+
+        // Automatically set updated_by on update
+        static::updating(function ($model) {
+            if (auth()->check() && !$model->isDirty('updated_by')) {
+                $model->updated_by = auth()->id();
+            }
+        });
+
+        // Automatically set deleted_by on soft delete
+        static::deleting(function ($model) {
+            if (method_exists($model, 'isForceDeleting') && !$model->isForceDeleting()) {
+                if (auth()->check() && !$model->deleted_by) {
+                    $model->deleted_by = auth()->id();
+                    $model->saveQuietly(); // Save without triggering events
+                }
+            }
+        });
+    }
+
+
+    /**
+     * Get the user who created this record
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(config('auth.providers.users.model'), 'created_by');
+    }
+
+    /**
+     * Get the user who last updated this record
+     */
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(config('auth.providers.users.model'), 'updated_by');
+    }
+
+    /**
+     * Get the user who deleted this record
+     */
+    public function deleter(): BelongsTo
+    {
+        return $this->belongsTo(config('auth.providers.users.model'), 'deleted_by');
+    }
+
+    /**
+     * Scope to filter by creator
+     */
+    public function scopeCreatedBy($query, $userId)
+    {
+        return $query->where('created_by', $userId);
+    }
+
+    /**
+     * Scope to filter by updater
+     */
+    public function scopeUpdatedBy($query, $userId)
+    {
+        return $query->where('updated_by', $userId);
+    }
+
+    /**
+     * Scope to filter by deleter
+     */
+    public function scopeDeletedBy($query, $userId)
+    {
+        return $query->where('deleted_by', $userId);
+    }
+}
+///////End-of-File : HasAuditFields.php
+
+File : HasColumnTransformations.php
+/////////Content of file HasColumnTransformations.php
+<?php
+
+namespace App\Models\Traits;
+
+/**
+ * Trait HasColumnTransformations
+ * 
+ * Automatically transform column values during create/update
+ * 
+ * Usage in Model:
+ * 
+ * use HasColumnTransformations;
+ * 
+ * protected $columnTransformations = [
+ *     'code' => 'uppercase_alphanumeric_dash',
+ *     'slug' => 'lowercase_alphanumeric_dash',
+ *     'name' => 'title_case',
+ *     'email' => 'lowercase',
+ *     'custom_field' => ['regex' => '/[^A-Z0-9]/', 'replacement' => '']
+ * ];
+ */
+trait HasColumnTransformations
+{
+    protected static function bootHasColumnTransformations(): void
+    {
+        // Apply transformations before creating
+        static::creating(function ($model) {
+            $model->applyColumnTransformations();
+        });
+
+        // Apply transformations before updating
+        static::updating(function ($model) {
+            $model->applyColumnTransformations();
+        });
+    }
+
+    /**
+     * Apply all column transformations
+     */
+    protected function applyColumnTransformations(): void
+    {
+        if (empty($this->columnTransformations)) {
+            return;
+        }
+
+        foreach ($this->columnTransformations as $column => $transformation) {
+            if ($this->isFillable($column) && $this->{$column} !== null) {
+                $this->{$column} = $this->transformValue($this->{$column}, $transformation);
+            }
+        }
+    }
+
+    /**
+     * Transform a value based on transformation type
+     */
+    protected function transformValue($value, $transformation)
+    {
+        // Handle array-based custom transformations
+        if (is_array($transformation)) {
+            return $this->applyCustomTransformation($value, $transformation);
+        }
+
+        // Handle string-based predefined transformations
+        return match ($transformation) {
+            // Uppercase transformations
+            'uppercase' => strtoupper($value),
+            'uppercase_alphanumeric' => $this->uppercaseAlphanumeric($value),
+            'uppercase_alphanumeric_dash' => $this->uppercaseAlphanumericDash($value),
+            'uppercase_alphanumeric_underscore' => $this->uppercaseAlphanumericUnderscore($value),
+            'uppercase_alphanumeric_dash_underscore' => $this->uppercaseAlphanumericDashUnderscore($value),
+
+            // Lowercase transformations
+            'lowercase' => strtolower($value),
+            'lowercase_alphanumeric' => $this->lowercaseAlphanumeric($value),
+            'lowercase_alphanumeric_dash' => $this->lowercaseAlphanumericDash($value),
+            'lowercase_alphanumeric_underscore' => $this->lowercaseAlphanumericUnderscore($value),
+            'lowercase_alphanumeric_dash_underscore' => $this->lowercaseAlphanumericDashUnderscore($value),
+            'lowercase_alphanumeric_dash_dot' => $this->lowercaseAlphanumericDashDot($value),
+
+            // Title/Sentence case
+            'title_case' => $this->titleCase($value),
+            'sentence_case' => $this->sentenceCase($value),
+            'capitalize_first' => ucfirst($value),
+
+            // Alphanumeric only
+            'alphanumeric' => $this->alphanumeric($value),
+            'numeric' => $this->numeric($value),
+            'alpha' => $this->alpha($value),
+
+            // Special formats
+            // 'slug' => \Illuminate\Support\Str::slug($value),
+            'snake_case' => $this->snakeCase($value),
+            'kebab_case' => $this->kebabCase($value),
+            'camel_case' => $this->camelCase($value),
+            'pascal_case' => $this->pascalCase($value),
+
+            // Trimming
+            'trim' => trim($value),
+            'trim_spaces' => $this->trimSpaces($value),
+
+            default => $value,
+        };
+    }
+
+    /**
+     * Apply custom regex-based transformation
+     */
+    protected function applyCustomTransformation($value, array $config)
+    {
+        if (isset($config['regex']) && isset($config['replacement'])) {
+            return preg_replace($config['regex'], $config['replacement'], $value);
+        }
+
+        if (isset($config['callback']) && is_callable($config['callback'])) {
+            return call_user_func($config['callback'], $value);
+        }
+
+        return $value;
+    }
+
+    // UPPERCASE TRANSFORMATIONS
+    protected function uppercaseAlphanumeric($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9]/', '', $value);
+        return strtoupper($cleaned);
+    }
+
+    protected function uppercaseAlphanumericDash($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9\-]/', '', $value);
+        return strtoupper($cleaned);
+    }
+
+    protected function uppercaseAlphanumericUnderscore($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9_]/', '', $value);
+        return strtoupper($cleaned);
+    }
+
+    protected function uppercaseAlphanumericDashUnderscore($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9\-_]/', '', $value);
+        return strtoupper($cleaned);
+    }
+
+    // LOWERCASE TRANSFORMATIONS
+    protected function lowercaseAlphanumeric($value): string
+    {
+        return strtolower(preg_replace('/[^A-Za-z0-9]/', '', $value));
+    }
+
+    protected function lowercaseAlphanumericDash($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9\-]/', '', $value);
+        $cleaned = preg_replace('/-+/', '-', $cleaned);
+        return strtolower(trim($cleaned, '-'));
+    }
+
+    protected function lowercaseAlphanumericUnderscore($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9_]/', '', $value);
+        $cleaned = preg_replace('/_+/', '_', $cleaned);
+        return strtolower(trim($cleaned, '_'));
+    }
+
+    protected function lowercaseAlphanumericDashUnderscore($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9\-_]/', '', $value);
+        return strtolower($cleaned);
+    }
+
+    protected function lowercaseAlphanumericDashDot($value): string
+    {
+        $cleaned = preg_replace('/[^A-Za-z0-9\-\.]/', '', $value);
+        return strtolower($cleaned);
+    }
+
+    // CASE TRANSFORMATIONS
+    protected function titleCase($value): string
+    {
+        return mb_convert_case($value, MB_CASE_TITLE, 'UTF-8');
+    }
+
+    protected function sentenceCase($value): string
+    {
+        return ucfirst(strtolower($value));
+    }
+
+    // ALPHANUMERIC TRANSFORMATIONS
+    protected function alphanumeric($value): string
+    {
+        return preg_replace('/[^A-Za-z0-9]/', '', $value);
+    }
+
+    protected function numeric($value): string
+    {
+        return preg_replace('/[^0-9]/', '', $value);
+    }
+
+    protected function alpha($value): string
+    {
+        return preg_replace('/[^A-Za-z]/', '', $value);
+    }
+
+    // SPECIAL FORMATS
+    protected function slug($value): string
+    {
+        // return \Illuminate\Support\Str::slug($value);
+    }
+
+    protected function snakeCase($value): string
+    {
+        return \Illuminate\Support\Str::snake($value);
+    }
+
+    protected function kebabCase($value): string
+    {
+        return \Illuminate\Support\Str::kebab($value);
+    }
+
+    protected function camelCase($value): string
+    {
+        return \Illuminate\Support\Str::camel($value);
+    }
+
+    protected function pascalCase($value): string
+    {
+        return \Illuminate\Support\Str::studly($value);
+    }
+
+    protected function trimSpaces($value): string
+    {
+        return preg_replace('/\s+/', ' ', trim($value));
+    }
+}
+///////End-of-File : HasColumnTransformations.php
+
+File : HasSlug.php
+/////////Content of file HasSlug.php
+<?php
+
+namespace App\Models\Traits;
+
+use Illuminate\Support\Str;
+
+/**
+ * Trait HasSlug
+ * 
+ * Automatically generates slug from specified field
+ * 
+ * @property string $slug
+ */
+trait HasSlug
+{
+    protected static function bootHasSlug(): void
+    {
+        static::creating(function ($model) {
+            if (empty($model->slug)) {
+                $model->slug = $model->generateSlug();
+            }
+        });
+
+        static::updating(function ($model) {
+            if ($model->isDirty($model->getSlugSourceField())) {
+                $model->slug = $model->generateSlug();
+            }
+        });
+    }
+
+    /**
+     * Generate a unique slug
+     */
+    protected function generateSlug(): string
+    {
+        $sourceField = $this->getSlugSourceField();
+        $slug = Str::slug($this->{$sourceField});
+        $originalSlug = $slug;
+        $count = 1;
+
+        // Ensure uniqueness
+        while (static::where('slug', $slug)->where('id', '!=', $this->id ?? 0)->exists()) {
+            $slug = $originalSlug . '-' . $count++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Get the field to generate slug from
+     * Override this in your model if needed
+     */
+    protected function getSlugSourceField(): string
+    {
+        return property_exists($this, 'slugSourceField')
+            ? $this->slugSourceField
+            : 'name';
+    }
+
+    /**
+     * Scope to find by slug
+     */
+    public function scopeSlug($query, string $slug)
+    {
+        return $query->where('slug', $slug);
+    }
+
+    /**
+     * Get the route key for the model
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'slug';
+    }
+}
+///////End-of-File : HasSlug.php
+
+File : HasTreeStructure.php
+/////////Content of file HasTreeStructure.php
+<?php
+
+namespace App\Models\Traits;
+
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+/**
+ * Trait HasTreeStructure
+ * 
+ * Provides hierarchical tree functionality with materialized path
+ * 
+ * Required fields:
+ * - parent_id (nullable foreign key to self)
+ * - level (integer)
+ * - path (text, stores '/1/5/12' format)
+ * 
+ * Usage:
+ * use HasTreeStructure;
+ * 
+ * Auto-maintains:
+ * - level (depth in tree)
+ * - path (materialized path for fast queries)
+ */
+trait HasTreeStructure
+{
+    /**
+     * Boot the trait
+     */
+    protected static function bootHasTreeStructure(): void
+    {
+        static::creating(function ($model) {
+            $model->updateTreeFields();
+        });
+
+        static::updating(function ($model) {
+            if ($model->isDirty('parent_id')) {
+                $model->updateTreeFields();
+                $model->updateDescendantsPath();
+            }
+        });
+    }
+
+    /**
+     * Parent relationship
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(static::class, 'parent_id');
+    }
+
+    /**
+     * Children relationship
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(static::class, 'parent_id');
+    }
+
+    /**
+     * Update level and path
+     */
+    protected function updateTreeFields(): void
+    {
+        if ($this->parent_id) {
+            $parent = static::find($this->parent_id);
+            $this->level = $parent->level + 1;
+            $this->path = $parent->path . '/' . $this->parent_id;
+        } else {
+            $this->level = 0;
+            $this->path = '';
+        }
+    }
+
+    /**
+     * Update all descendants' paths
+     */
+    protected function updateDescendantsPath(): void
+    {
+        foreach ($this->children as $child) {
+            $child->updateTreeFields();
+            $child->saveQuietly();
+            $child->updateDescendantsPath();
+        }
+    }
+
+    /**
+     * Get all ancestors
+     */
+    public function ancestors()
+    {
+        if (!$this->path) {
+            return collect();
+        }
+
+        $ids = array_filter(explode('/', $this->path));
+
+        return static::whereIn('id', $ids)->orderBy('level')->get();
+    }
+
+    /**
+     * Get all descendants
+     */
+    public function descendants()
+    {
+        return static::where('path', 'like', $this->path . '/' . $this->id . '%')->get();
+    }
+
+    /**
+     * Get siblings
+     */
+    public function siblings()
+    {
+        return static::where('parent_id', $this->parent_id)
+            ->where('id', '!=', $this->id)
+            ->get();
+    }
+
+    /**
+     * Check if this is ancestor of another node
+     */
+    public function isAncestorOf($node): bool
+    {
+        return str_contains($node->path, '/' . $this->id . '/') ||
+            str_ends_with($node->path, '/' . $this->id);
+    }
+
+    /**
+     * Check if this is descendant of another node
+     */
+    public function isDescendantOf($node): bool
+    {
+        return str_contains($this->path, '/' . $node->id . '/') ||
+            str_ends_with($this->path, '/' . $node->id);
+    }
+
+    /**
+     * Get root nodes (level 0)
+     */
+    public function scopeRoots($query)
+    {
+        return $query->whereNull('parent_id')->orWhere('level', 0);
+    }
+
+    /**
+     * Get tree structure as nested array
+     */
+    public static function tree()
+    {
+        $items = static::orderBy('sort_order')->get();
+
+        return static::buildTree($items);
+    }
+
+    /**
+     * Build nested tree structure
+     */
+    protected static function buildTree($items, $parentId = null)
+    {
+        $branch = [];
+
+        foreach ($items as $item) {
+            if ($item->parent_id == $parentId) {
+                $children = static::buildTree($items, $item->id);
+
+                if ($children) {
+                    $item->children_tree = $children;
+                }
+
+                $branch[] = $item;
+            }
+        }
+
+        return $branch;
+    }
+
+    /**
+     * Get breadcrumb path
+     */
+    public function breadcrumb($separator = ' > ')
+    {
+        $ancestors = $this->ancestors();
+        $ancestors->push($this);
+
+        return $ancestors->pluck('name')->implode($separator);
+    }
+
+    /**
+     * Scope: By level
+     */
+    public function scopeByLevel($query, int $level)
+    {
+        return $query->where('level', $level);
+    }
+}
+///////End-of-File : HasTreeStructure.php
+

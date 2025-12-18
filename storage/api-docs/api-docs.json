@@ -1,0 +1,961 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "VDMS Auth API",
+        "description": "Vehic le Dealership Management System - Authentication API",
+        "contact": {
+            "name": "API Support",
+            "url": "https://waba.insightechindia.in/public/",
+            "email": "support@bmpl.com"
+        },
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost/vdms/public/api/v1",
+            "description": "Development Server"
+        },
+        {
+            "url": "https://waba.insightechindia.in/public/api/v1",
+            "description": "Production Server"
+        }
+    ],
+    "paths": {
+        "/auth/request-otp": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Request OTP for login",
+                "description": "Send OTP to registered mobile and email. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+                "operationId": "da8e0f959e8b8215f059076df1dc515e",
+                "requestBody": {
+                    "description": "Mobile number to receive OTP",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "mobile"
+                                ],
+                                "properties": {
+                                    "mobile": {
+                                        "description": "10-digit mobile number (India)",
+                                        "type": "string",
+                                        "example": "9876543210"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OTP sent successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S001"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "OTP sent to your registered mobile and email"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "otp": {
+                                                    "description": "OTP (remove in production)",
+                                                    "type": "string",
+                                                    "example": "123456"
+                                                },
+                                                "expires_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2025-12-17T02:07:00Z"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Mobile not registered",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 404
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E002"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Mobile not registered"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Account locked or exceeds rate limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 403
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E004"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Account locked. Contact admin"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 429
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E005"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Too many OTP requests. Try again later"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 500
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E500"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Internal server error"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/verify-otp": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Verify OTP and bind device for login",
+                "description": "Verify OTP code and create session. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+                "operationId": "7bd765e9726ecf6b2c094f6164a77693",
+                "requestBody": {
+                    "description": "OTP verification data",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "mobile",
+                                    "otp",
+                                    "device_id",
+                                    "device_name",
+                                    "platform"
+                                ],
+                                "properties": {
+                                    "mobile": {
+                                        "description": "10-digit mobile number",
+                                        "type": "string",
+                                        "example": "9876543210"
+                                    },
+                                    "otp": {
+                                        "description": "6-digit OTP",
+                                        "type": "string",
+                                        "example": "123456"
+                                    },
+                                    "device_id": {
+                                        "description": "Unique device identifier",
+                                        "type": "string",
+                                        "example": "uuid-1234-5678-9012"
+                                    },
+                                    "device_name": {
+                                        "description": "Device name",
+                                        "type": "string",
+                                        "example": "iPhone 14 Pro"
+                                    },
+                                    "platform": {
+                                        "description": "Device platform",
+                                        "type": "string",
+                                        "enum": [
+                                            "iOS",
+                                            "Android",
+                                            "Web"
+                                        ],
+                                        "example": "iOS"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Login successful",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S001"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Login successful"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "token": {
+                                                    "description": "Bearer token for subsequent requests",
+                                                    "type": "string",
+                                                    "example": "1|abcdef123456..."
+                                                },
+                                                "user": {
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "integer",
+                                                            "example": 5
+                                                        },
+                                                        "name": {
+                                                            "type": "string",
+                                                            "example": "Super Admin"
+                                                        },
+                                                        "email": {
+                                                            "type": "string",
+                                                            "example": "super.admin@bmpl.com"
+                                                        },
+                                                        "mobile": {
+                                                            "type": "string",
+                                                            "example": "9876543210"
+                                                        },
+                                                        "code": {
+                                                            "type": "string",
+                                                            "example": "SUP001"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired OTP",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 401
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E002"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Invalid OTP"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Account locked due to failed attempts",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 403
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E004"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Account locked due to failed attempts"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Mobile not registered",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 404
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E002"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Mobile not registered"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 500
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": false
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "E500"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Internal server error"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Get current user details",
+                "description": "Retrieve authenticated user details. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+                "operationId": "e339e0e74860c0647fd1d41bbbbc13b2",
+                "responses": {
+                    "200": {
+                        "description": "User details retrieved successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S001"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "Super Admin"
+                                                },
+                                                "email": {
+                                                    "type": "string",
+                                                    "example": "super.admin@bmpl.com"
+                                                },
+                                                "mobile": {
+                                                    "type": "string",
+                                                    "example": "9876543210"
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "example": "SUP001"
+                                                },
+                                                "is_active": {
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "created_at": {
+                                                    "type": "string",
+                                                    "format": "date-time"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - No valid token provided"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Logout and revoke token",
+                "description": "Invalidate current session token. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+                "operationId": "a05022a34eef599e04fb0a5254375b84",
+                "responses": {
+                    "200": {
+                        "description": "Logged out successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S001"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Logged out successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - No valid token provided"
+                    },
+                    "500": {
+                        "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "List all system settings grouped by topic",
+                "description": "Returns all active system settings organized by topic/category",
+                "operationId": "264208b5295b9f8cf6fd6a7c9437954a",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved settings",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "site": {
+                                        "Basic Settings": {
+                                            "site.name": "My Dealership CRM",
+                                            "site.slogan": "Drive Your Success",
+                                            "site.url": "https://crm.example.com"
+                                        },
+                                        "Logo Settings": {
+                                            "site.logo.header": "/images/logo-header.png",
+                                            "site.logo.footer": "/images/logo-footer.png",
+                                            "site.logo.login": "/images/logo-login.png"
+                                        }
+                                    },
+                                    "dealership": {
+                                        "Contact": {
+                                            "dealership.name": "ABC Motors",
+                                            "dealership.phone": "+91-8800000000",
+                                            "dealership.email": "info@abcmotors.com"
+                                        }
+                                    },
+                                    "pricing": {
+                                        "Tax Rates": {
+                                            "pricing.gst_rate": 18,
+                                            "pricing.tds_rate": 1
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/topic/{topic}": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get settings for a specific topic",
+                "description": "Returns all settings for a given topic/category",
+                "operationId": "3633998e45cbb93d50392910b72b245f",
+                "parameters": [
+                    {
+                        "name": "topic",
+                        "in": "path",
+                        "description": "Topic code (e.g., 'site', 'dealership', 'pricing')",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved topic settings",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "Basic Settings": {
+                                        "site.name": "My Dealership CRM",
+                                        "site.slogan": "Drive Your Success"
+                                    },
+                                    "Logo Settings": {
+                                        "site.logo.header": "/images/logo-header.png"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Topic not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/{key}": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get a single setting by key",
+                "description": "Returns the value of a specific setting key",
+                "operationId": "b471c330bd647286e5aec03f920f64f1",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "description": "Setting key (e.g., 'site.name')",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved setting",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "key": "site.name",
+                                    "value": "My Dealership CRM"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Setting not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Update a setting value (admin only)",
+                "description": "Updates the value of a specific setting key",
+                "operationId": "4b4a01b932a5e3559712f79b6998affc",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "description": "Setting key (e.g., 'site.name')",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "description": "Setting value",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "value"
+                                ],
+                                "properties": {
+                                    "value": {
+                                        "description": "New value for the setting",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Setting updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                },
+                                "example": {
+                                    "message": "Setting updated successfully",
+                                    "key": "site.name",
+                                    "value": "New Site Name"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - Admin access required"
+                    },
+                    "404": {
+                        "description": "Setting not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/category/site": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get site configuration settings",
+                "description": "Returns all site-specific settings (name, logo, footer, theme, etc.)",
+                "operationId": "c034421d48ba6a3f329154c45b7e849e",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved site settings"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/category/dealership": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get dealership information settings",
+                "description": "Returns dealership name, address, contact details, etc.",
+                "operationId": "24e11cda94b17fd644ac9a9b11a51ed4",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved dealership settings"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/category/pricing": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Get pricing configuration settings",
+                "description": "Returns tax rates, GST, TDS, and other pricing-related settings",
+                "operationId": "b91a396971fc14dcc3af123a9430ee05",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved pricing settings"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/export/json": {
+            "get": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Export all settings as JSON",
+                "description": "Returns all settings in JSON format for backup or migration",
+                "operationId": "370926b8b1d662c577f006d2663f4b3b",
+                "responses": {
+                    "200": {
+                        "description": "Settings exported successfully"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/system-settings/import/json": {
+            "post": {
+                "tags": [
+                    "System Settings"
+                ],
+                "summary": "Import settings from JSON (admin only)",
+                "description": "Imports system settings from a JSON file",
+                "operationId": "ec157c3314d9179fdc50cbdf115d2aa7",
+                "requestBody": {
+                    "description": "JSON file with settings",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": {
+                                    "required": [
+                                        "key",
+                                        "value"
+                                    ],
+                                    "properties": {
+                                        "key": {
+                                            "type": "string"
+                                        },
+                                        "value": {
+                                            "type": "string"
+                                        },
+                                        "topic": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Settings imported successfully"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Branch": {
+                "title": "Branch",
+                "description": "Branch Model\n\nRepresents company branches/offices"
+            },
+            "Department": {
+                "title": "Department",
+                "description": "Department Model\n\nRepresents organizational departments (Sales, HR, Finance, etc.)"
+            }
+        },
+        "securitySchemes": {
+            "sanctum": {
+                "type": "http",
+                "bearerFormat": "token",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "System Settings",
+            "description": "API endpoints for retrieving application system settings"
+        },
+        {
+            "name": "Authentication",
+            "description": "Authentication"
+        }
+    ]
+}
