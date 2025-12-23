@@ -577,14 +577,14 @@
                 ]
             }
         },
-        "/api/system-settings": {
+        "/system-settings": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "List all system settings grouped by topic",
                 "description": "Returns all active system settings organized by topic/category",
-                "operationId": "264208b5295b9f8cf6fd6a7c9437954a",
+                "operationId": "f37da0f1a0d40c753e581d484e5203fa",
                 "responses": {
                     "200": {
                         "description": "Successfully retrieved settings",
@@ -634,14 +634,14 @@
                 ]
             }
         },
-        "/api/system-settings/topic/{topic}": {
+        "/system-settings/topic/{topic}": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Get settings for a specific topic",
                 "description": "Returns all settings for a given topic/category",
-                "operationId": "3633998e45cbb93d50392910b72b245f",
+                "operationId": "6a44cdc9898dae26ff1132a99ef33eeb",
                 "parameters": [
                     {
                         "name": "topic",
@@ -684,14 +684,14 @@
                 ]
             }
         },
-        "/api/system-settings/{key}": {
+        "/system-settings/{key}": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Get a single setting by key",
                 "description": "Returns the value of a specific setting key",
-                "operationId": "b471c330bd647286e5aec03f920f64f1",
+                "operationId": "25aae6e31586231ee72e41f3e9faaabf",
                 "parameters": [
                     {
                         "name": "key",
@@ -734,7 +734,7 @@
                 ],
                 "summary": "Update a setting value (admin only)",
                 "description": "Updates the value of a specific setting key",
-                "operationId": "4b4a01b932a5e3559712f79b6998affc",
+                "operationId": "4d13b8f685f67b11a270fe70170eb54b",
                 "parameters": [
                     {
                         "name": "key",
@@ -799,14 +799,14 @@
                 ]
             }
         },
-        "/api/system-settings/category/site": {
+        "/system-settings/category/site": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Get site configuration settings",
                 "description": "Returns all site-specific settings (name, logo, footer, theme, etc.)",
-                "operationId": "c034421d48ba6a3f329154c45b7e849e",
+                "operationId": "8c29936581c61494bbba6c983ce64acb",
                 "responses": {
                     "200": {
                         "description": "Successfully retrieved site settings"
@@ -819,14 +819,14 @@
                 ]
             }
         },
-        "/api/system-settings/category/dealership": {
+        "/system-settings/category/dealership": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Get dealership information settings",
                 "description": "Returns dealership name, address, contact details, etc.",
-                "operationId": "24e11cda94b17fd644ac9a9b11a51ed4",
+                "operationId": "3d356d83de5ffc52305f825495e41fc1",
                 "responses": {
                     "200": {
                         "description": "Successfully retrieved dealership settings"
@@ -839,14 +839,14 @@
                 ]
             }
         },
-        "/api/system-settings/category/pricing": {
+        "/system-settings/category/pricing": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Get pricing configuration settings",
                 "description": "Returns tax rates, GST, TDS, and other pricing-related settings",
-                "operationId": "b91a396971fc14dcc3af123a9430ee05",
+                "operationId": "2fb019ff7461f5e307bc469e2f0075b7",
                 "responses": {
                     "200": {
                         "description": "Successfully retrieved pricing settings"
@@ -859,14 +859,14 @@
                 ]
             }
         },
-        "/api/system-settings/export/json": {
+        "/system-settings/export/json": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Export all settings as JSON",
                 "description": "Returns all settings in JSON format for backup or migration",
-                "operationId": "370926b8b1d662c577f006d2663f4b3b",
+                "operationId": "de9d9cf7b3bd877ca750152b05679963",
                 "responses": {
                     "200": {
                         "description": "Settings exported successfully"
@@ -879,14 +879,14 @@
                 ]
             }
         },
-        "/api/system-settings/import/json": {
+        "/system-settings/import/json": {
             "post": {
                 "tags": [
                     "System Settings"
                 ],
                 "summary": "Import settings from JSON (admin only)",
                 "description": "Imports system settings from a JSON file",
-                "operationId": "ec157c3314d9179fdc50cbdf115d2aa7",
+                "operationId": "88cb780376abc39000a278b98b05d6f8",
                 "requestBody": {
                     "description": "JSON file with settings",
                     "required": true,

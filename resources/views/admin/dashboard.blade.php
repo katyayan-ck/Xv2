@@ -6,7 +6,7 @@
         <div class="row mb-4">
             <div class="col-md-8">
                 <h1 class="mb-0"><i class="la la-dashboard"></i> Dashboard</h1>
-                <p class="text-muted small">{{ $userAccessLabel }}</p>
+                <p class="text-muted small"></p>
             </div>
             <div class="col-md-4 text-right">
                 <span class="badge badge-info">{{ now()->format('D, M d Y') }}</span>
@@ -18,7 +18,7 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Branches',
-                    'value' => $totalBranches,
+                    'value' => 0, //$totalBranches,
                     'icon' => 'la-sitemap',
                     'color' => 'primary',
                     'link' => backpack_url('branch'),
@@ -27,7 +27,7 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Locations',
-                    'value' => $totalLocations,
+                    'value' => 0, //$totalLocations,
                     'icon' => 'la-map-marker',
                     'color' => 'info',
                     'link' => backpack_url('location'),
@@ -36,7 +36,7 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Departments',
-                    'value' => $totalDepartments,
+                    'value' => 0, //$totalDepartments,
                     'icon' => 'la-building',
                     'color' => 'success',
                     'link' => backpack_url('department'),
@@ -45,7 +45,7 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Employees',
-                    'value' => $totalEmployees,
+                    'value' => 0, //$totalEmployees,
                     'icon' => 'la-users',
                     'color' => 'warning',
                     'link' => backpack_url('employee'),
@@ -58,8 +58,8 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Enquiries',
-                    'value' => $totalEnquiries,
-                    'subtitle' => $todayEnquiries . ' today',
+                    'value' => 0, //$totalEnquiries,
+                    'subtitle' => '', //$todayEnquiries . ' today',
                     'icon' => 'la-comments',
                     'color' => 'secondary',
                     'link' => backpack_url('enquiry'),
@@ -68,8 +68,8 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Bookings',
-                    'value' => $totalBookings,
-                    'subtitle' => $todayBookings . ' today',
+                    'value' => 0, //$totalBookings,
+                    'subtitle' => '', //$todayBookings . ' today',
                     'icon' => 'la-calendar',
                     'color' => 'danger',
                     'link' => backpack_url('booking'),
@@ -78,8 +78,8 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Total Sales',
-                    'value' => '₹' . number_format($totalSales, 0),
-                    'subtitle' => '₹' . number_format($todaySales, 0) . ' today',
+                    'value' => '₹' . number_format(0, 0),
+                    'subtitle' => '₹' . number_format(0, 0) . ' today',
                     'icon' => 'la-rupee',
                     'color' => 'success',
                     'link' => backpack_url('sale'),
@@ -88,7 +88,7 @@
             <div class="col-md-3">
                 @include('admin.widgets.stats-card', [
                     'title' => 'Active Users',
-                    'value' => $activeUsers,
+                    'value' => 0, //$activeUsers,
                     'icon' => 'la-user-circle',
                     'color' => 'info',
                     'link' => backpack_url('user'),
@@ -97,15 +97,15 @@
         </div>
 
         {{-- MY ACCESS SECTION --}}
-        @if ($showMyAccessSection)
+        @if (true)
             <div class="row mb-4">
                 <div class="col-md-12">
                     <div class="alert alert-info">
                         <strong><i class="la la-info-circle"></i> Your Access Scope:</strong>
                         <ul class="mb-0 mt-2">
-                            <li>Branches: <strong>{{ $totalBranches }}</strong></li>
-                            <li>Locations: <strong>{{ $totalLocations }}</strong></li>
-                            <li>Departments: <strong>{{ $totalDepartments }}</strong></li>
+                            <li>Branches: <strong></strong></li>
+                            <li>Locations: <strong></strong></li>
+                            <li>Departments: <strong></strong></li>
                         </ul>
                     </div>
                 </div>
@@ -117,7 +117,7 @@
             <div class="col-md-6">
                 @include('admin.widgets.activity-feed', [
                     'title' => 'Recent Enquiries',
-                    'items' => $recentEnquiries,
+                    'items' => [], //$recentEnquiries,
                     'type' => 'enquiry',
                     'icon' => 'la-comments',
                     'color' => 'secondary',
@@ -126,7 +126,7 @@
             <div class="col-md-6">
                 @include('admin.widgets.activity-feed', [
                     'title' => 'Recent Bookings',
-                    'items' => $recentBookings,
+                    'items' => [], //$recentBookings,
                     'type' => 'booking',
                     'icon' => 'la-calendar',
                     'color' => 'danger',

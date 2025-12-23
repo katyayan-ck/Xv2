@@ -2,32 +2,69 @@
 
 namespace App\Exceptions;
 
-use Exception;
-use Illuminate\Http\JsonResponse;
+use App\Enums\ErrorCodeEnum;
 
-class PermissionException extends Exception
+/**
+ * Permission Exception
+ * 
+ * Thrown when user doesn't have required permission for action.
+ * Similar to AuthorizationException but for permission-specific scenarios.
+ * 
+ * HTTP Status: 403 (Forbidden)
+ */
+class PermissionException extends ApplicationException
 {
-    protected $code = 'E_PERMISSION';
-    protected $httpStatus = 403;
+    /**
+     * Permission that was denied
+     */
+    private string $permission;
 
+    /**
+     * Resource on which permission was denied
+     */
+    private ?string $resource;
+
+    /**
+     * Constructor
+     * 
+     * @param string $permission Permission name
+     * @param string|null $resource Resource name (optional)
+     */
     public function __construct(
-        string $message = '',
-        string $code = 'E_PERMISSION',
-        int $httpStatus = 403,
-        ?Exception $previous = null
+        string $permission = 'access',
+        ?string $resource = null
     ) {
-        $this->code = $code;
-        $this->httpStatus = $httpStatus;
-        parent::__construct($message, 0, $previous);
+        $this->permission = $permission;
+        $this->resource = $resource;
+
+        $message = $resource
+            ? "You don't have permission to {$permission} {$resource}"
+            : "You don't have permission to {$permission}";
+
+        parent::__construct(
+            $message,
+            ErrorCodeEnum::AUTH_FORBIDDEN,
+            403
+        );
     }
 
-    public function render(): JsonResponse
+    /**
+     * Get permission
+     * 
+     * @return string
+     */
+    public function getPermission(): string
     {
-        return response()->json([
-            'http_status' => $this->httpStatus,
-            'success' => false,
-            'code' => $this->code,
-            'message' => $this->message,
-        ], $this->httpStatus);
+        return $this->permission;
+    }
+
+    /**
+     * Get resource
+     * 
+     * @return string|null
+     */
+    public function getResource(): ?string
+    {
+        return $this->resource;
     }
 }

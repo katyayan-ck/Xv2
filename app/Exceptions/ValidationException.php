@@ -2,35 +2,48 @@
 
 namespace App\Exceptions;
 
-use Exception;
-use Illuminate\Http\JsonResponse;
+use ErrorCodeEnum;
 
-class ValidationException extends Exception
+/**
+ * Validation Exception
+ * 
+ * Thrown when input validation fails.
+ * Used for invalid mobile format, OTP format, device info, etc.
+ * 
+ * HTTP Status: 422 (Unprocessable Entity)
+ */
+class ValidationException extends ApplicationException
 {
-    protected $code = 'E_VALIDATION';
-    protected $httpStatus = 422;
-    protected $errors = [];
+    /**
+     * Field-level validation errors
+     */
+    protected array $errors = [];
 
+    /**
+     * Constructor
+     * 
+     * @param string $message Validation error message
+     * @param array $errors Field-level validation errors
+     * @param ErrorCodeEnum|null $errorCode Error code (defaults to VALIDATION_FAILED)
+     */
     public function __construct(
-        string $message = '',
+        string $message = 'Validation failed',
         array $errors = [],
-        string $code = 'E_VALIDATION',
-        int $httpStatus = 422
+        ?ErrorCodeEnum $errorCode = null
     ) {
-        $this->code = $code;
-        $this->httpStatus = $httpStatus;
         $this->errors = $errors;
-        parent::__construct($message);
+        $errorCode = $errorCode ?? ErrorCodeEnum::VALIDATION_FAILED;
+
+        parent::__construct($message, $errorCode, 422);
     }
 
-    public function render(): JsonResponse
+    /**
+     * Get validation errors
+     * 
+     * @return array
+     */
+    public function getErrors(): array
     {
-        return response()->json([
-            'http_status' => $this->httpStatus,
-            'success' => false,
-            'code' => $this->code,
-            'message' => $this->message,
-            'errors' => $this->errors,
-        ], $this->httpStatus);
+        return $this->errors;
     }
 }
