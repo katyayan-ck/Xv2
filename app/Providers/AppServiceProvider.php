@@ -8,6 +8,8 @@ use App\Services\RBACService;
 use App\Services\DataScopeService;
 use App\Services\AuthService;
 use App\Services\ApprovalService;
+use App\Services\FirebaseService;
+use App\Services\NotificationService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,6 +34,17 @@ class AppServiceProvider extends ServiceProvider
         // $this->app->singleton(ApprovalService::class, function ($app) {
         //     return new ApprovalService();
         // });
+
+        // Firebase Services
+        $this->app->singleton(FirebaseService::class, function ($app) {
+            return new FirebaseService();
+        });
+
+        $this->app->singleton(NotificationService::class, function ($app) {
+            return new NotificationService(
+                $app->make(FirebaseService::class)
+            );
+        });
     }
 
     /**

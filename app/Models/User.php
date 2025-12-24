@@ -7,8 +7,12 @@ use App\Models\Core\Employee;
 use App\Models\Core\Person;
 use App\Models\Core\UserType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\{
+    HasMany,
+    HasOne,
+    BelongsToMany,
+    BelongsTo
+};
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -18,6 +22,13 @@ use OwenIt\Auditing\Auditable as AuditableTrait;
 use Spatie\Permission\Traits\HasRoles;
 use App\Models\Core\ReportingHierarchy;
 use App\Models\Core\ApprovalHierarchy;
+use App\Models\Core\GraphNode;
+use App\Models\Core\NotificationsMaster;
+use App\Models\Core\Alert;
+use App\Models\Core\Notification;
+use App\Models\Core\Message;
+use App\Models\Core\UserDeviceToken;
+
 
 /**
  * User Model
@@ -99,6 +110,63 @@ class User extends Authenticatable implements Auditable
                 }
             }
         });
+    }
+
+
+    // ╔════════════════════════════════════════════════════════╗
+    // ║        Notifications RELATIONSHIPS       
+    // ╚════════════════════════════════════════════════════════╝
+
+
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
+    }
+
+    public function sentNotifications(): HasMany
+    {
+        return $this->hasMany(Notification::class, 'sender_id');
+    }
+
+    public function sentAlerts(): HasMany
+    {
+        return $this->hasMany(Alert::class, 'sender_id');
+    }
+
+    public function messagesSent(): HasMany
+    {
+        return $this->hasMany(Message::class, 'sender_id');
+    }
+
+    public function messagesReceived(): HasMany
+    {
+        return $this->hasMany(Message::class, 'receiver_id');
+    }
+
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(UserDeviceToken::class);
+    }
+
+    public function notificationsMaster(): HasOne
+    {
+        return $this->hasOne(NotificationsMaster::class);
+    }
+
+    // Helper method to get or create notifications master
+    public function getOrCreateNotificationsMaster(): NotificationsMaster
+    {
+        return $this->notificationsMaster ?? NotificationsMaster::create([
+            'user_id' => $this->id,
+            'total_count' => 0,
+            'unread_count' => 0,
+            'created_by' => $this->id,
+        ]);
     }
 
     // ╔════════════════════════════════════════════════════════╗

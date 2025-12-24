@@ -278,7 +278,10 @@ class SystemSettingApiController extends \App\Http\Controllers\BaseController
      *     operationId="getSiteSettings",
      *     tags={"System Settings"},
      *     summary="Get site configuration settings",
-     *     security={{"sanctum":{}}}
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(response=200, description="Successfully retrieved site settings"),
+     *     @OA\Response(response=404, description="Settings not found"),
+     *     @OA\Response(response=401, description="Unauthenticated")
      * )
      * 
      * @return JsonResponse Site settings
@@ -298,7 +301,10 @@ class SystemSettingApiController extends \App\Http\Controllers\BaseController
      *     operationId="getDealershipSettings",
      *     tags={"System Settings"},
      *     summary="Get dealership information settings",
-     *     security={{"sanctum":{}}}
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(response=200, description="Successfully retrieved dealership settings"),
+     *     @OA\Response(response=404, description="Settings not found"),
+     *     @OA\Response(response=401, description="Unauthenticated")
      * )
      * 
      * @return JsonResponse Dealership settings
@@ -318,7 +324,10 @@ class SystemSettingApiController extends \App\Http\Controllers\BaseController
      *     operationId="getPricingSettings",
      *     tags={"System Settings"},
      *     summary="Get pricing configuration settings",
-     *     security={{"sanctum":{}}}
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(response=200, description="Successfully retrieved pricing settings"),
+     *     @OA\Response(response=404, description="Settings not found"),
+     *     @OA\Response(response=401, description="Unauthenticated")
      * )
      * 
      * @return JsonResponse Pricing settings
@@ -338,7 +347,10 @@ class SystemSettingApiController extends \App\Http\Controllers\BaseController
      *     operationId="exportJson",
      *     tags={"System Settings"},
      *     summary="Export all settings as JSON",
-     *     security={{"sanctum":{}}}
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(response=200, description="Settings exported successfully"),
+     *     @OA\Response(response=403, description="Forbidden - Admin access required"),
+     *     @OA\Response(response=401, description="Unauthenticated")
      * )
      * 
      * @return JsonResponse Exported settings
@@ -383,7 +395,25 @@ class SystemSettingApiController extends \App\Http\Controllers\BaseController
      *     operationId="importJson",
      *     tags={"System Settings"},
      *     summary="Import settings from JSON",
-     *     security={{"sanctum":{}}}
+     *     security={{"sanctum":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"settings"},
+     *             @OA\Property(property="settings", type="array",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     @OA\Property(property="key", type="string"),
+     *                     @OA\Property(property="value", type="string"),
+     *                     @OA\Property(property="topic", type="string")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Import completed"),
+     *     @OA\Response(response=403, description="Forbidden - Admin access required"),
+     *     @OA\Response(response=422, description="Validation error"),
+     *     @OA\Response(response=401, description="Unauthenticated")
      * )
      * 
      * @param Request $request HTTP request with settings array

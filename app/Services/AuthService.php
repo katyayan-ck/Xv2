@@ -44,12 +44,12 @@ class AuthService
      */
     private const OTP_LENGTH = 6;
     private const OTP_EXPIRY_MINUTES = 10;
-    private const MAX_OTP_REQUESTS = 3;
+    private const MAX_OTP_REQUESTS = 5;
     private const OTP_REQUEST_WINDOW_MINUTES = 15;
     private const MAX_OTP_ATTEMPTS = 5;
     private const OTP_ATTEMPT_WINDOW_MINUTES = 15;
     private const ACCOUNT_LOCK_DURATION_MINUTES = 30;
-    private const DEVICE_LIMIT = 5;
+    private const DEVICE_LIMIT = 2;
     private const TOKEN_EXPIRY_HOURS = 24;
 
     /**
@@ -263,21 +263,21 @@ class AuthService
         string $platform
     ): array {
         try {
-            // Clean mobile number
+            // Clean mobile number - remove non-digits
             $mobile = preg_replace('/[^0-9]/', '', $mobile);
 
             // Validate inputs
             if (!$this->isValidMobile($mobile)) {
                 throw new ValidationException(
                     'Invalid mobile number format',
-                    ['mobile' => 'Mobile must be exactly 10 digits']
+                    ['mobile' => ['Mobile must be exactly 10 digits']]
                 );
             }
 
-            if (strlen($otp) !== self::OTP_LENGTH || !ctype_digit($otp)) {
+            if (strlen($otp) != self::OTP_LENGTH || !ctype_digit($otp)) {
                 throw new ValidationException(
                     'Invalid OTP format',
-                    ['otp' => 'OTP must be 6 digits']
+                    ['otp' => ['OTP must be 6 digits']]
                 );
             }
 
@@ -285,14 +285,14 @@ class AuthService
                 throw new ValidationException(
                     'Missing device information',
                     [
-                        'device_id' => 'Device ID is required',
-                        'device_name' => 'Device name is required',
-                        'platform' => 'Platform is required',
+                        'device_id' => ['Device ID is required'],
+                        'device_name' => ['Device name is required'],
+                        'platform' => ['Platform is required'],
                     ]
                 );
             }
 
-            // ✅ FIND USER IN DATABASE
+            // FIND USER IN DATABASE
             $user = User::where('mobile', $mobile)
                 ->whereNull('deleted_at')
                 ->first();
@@ -300,14 +300,14 @@ class AuthService
             if (!$user) {
                 throw new AuthenticationException(
                     ErrorCodeEnum::AUTH_USER_NOT_FOUND,
-                    "Mobile number '{$mobile}' not registered"
+                    'Mobile number ' . $mobile . ' not registered'
                 );
             }
 
             // Check if account is locked
-            $lockKey = "account_lock:{$mobile}";
+            $lockKey = 'account_lock_' . $mobile;
             if (Cache::has($lockKey)) {
-                Log::warning('OTP verification attempt on locked account', [
+                \Log::warning('OTP verification attempt on locked account', [
                     'user_id' => $user->id,
                     'mobile' => $mobile,
                     'ip_address' => $this->request->ip(),
@@ -318,12 +318,12 @@ class AuthService
                 );
             }
 
-            // Check rate limit: max 5 verification attempts per 15 minutes
-            $failureKey = "otp_failures:{$mobile}";
+            // Check rate limit - max 5 verification attempts per 15 minutes
+            $failureKey = 'otp_failures_' . $mobile;
             $failureCount = Cache::get($failureKey, 0);
 
             if ($failureCount >= self::MAX_OTP_ATTEMPTS) {
-                Log::warning('OTP verification rate limit exceeded', [
+                \Log::warning('OTP verification rate limit exceeded', [
                     'user_id' => $user->id,
                     'mobile' => $mobile,
                     'attempts' => $failureCount,
@@ -351,7 +351,7 @@ class AuthService
                 );
             }
 
-            // Get latest OTP token (not expired, not used)
+            // GET LATEST OTP TOKEN (not expired, not used)
             $otpToken = OtpToken::where('user_id', $user->id)
                 ->where('mobile', $mobile)
                 ->where('expires_at', '>', now())
@@ -360,7 +360,7 @@ class AuthService
                 ->first();
 
             if (!$otpToken) {
-                Log::warning('OTP not found or expired', [
+                \Log::warning('OTP not found or expired', [
                     'user_id' => $user->id,
                     'mobile' => $mobile,
                 ]);
@@ -388,22 +388,23 @@ class AuthService
                 );
             }
 
-            // Verify OTP hash
+            // VERIFY OTP HASH
             if (!Hash::check($otp, $otpToken->otp_hash)) {
-                Log::warning('Invalid OTP provided', [
+                \Log::warning('Invalid OTP provided', [
                     'user_id' => $user->id,
                     'mobile' => $mobile,
                 ]);
 
                 // Increment failure count
+                $newFailureCount = $failureCount + 1;
                 Cache::put(
                     $failureKey,
-                    $failureCount + 1,
+                    $newFailureCount,
                     now()->addMinutes(self::OTP_ATTEMPT_WINDOW_MINUTES)
                 );
 
                 // Lock account after 5 failures
-                if ($failureCount + 1 >= self::MAX_OTP_ATTEMPTS) {
+                if ($newFailureCount >= self::MAX_OTP_ATTEMPTS) {
                     Cache::put(
                         $lockKey,
                         true,
@@ -422,138 +423,87 @@ class AuthService
                 ]);
 
                 throw new AuthenticationException(
-                    ErrorCodeEnum::AUTH_OTP_INVALID,
-                    'Invalid OTP code. Please try again'
+                    ErrorCodeEnum::AUTH_INVALID_OTP,
+                    'Invalid OTP'
                 );
             }
 
-            // Mark OTP as used
+            // ✅ CRITICAL: Create device session FIRST (before token)
+            $deviceSession = DeviceSession::create([
+                'user_id' => $user->id,
+                'device_id' => $deviceId,
+                'device_name' => $deviceName,
+                'platform' => $platform,
+                'ip_address' => $this->request->ip(),
+                'user_agent' => $this->request->userAgent(),
+                'last_active_at' => now(),
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+
+            // ✅ CRITICAL: Mark OTP as used
             $otpToken->update([
                 'used_at' => now(),
                 'updated_by' => $user->id,
             ]);
 
-            // Clear failure counter
+            // ✅ CRITICAL FIX: Create token WITH device_id in abilities!
+            // Format: ['*', 'device_id:xxxxx'] - this is what ValidateDevice middleware looks for
+            $token = $user->createToken(
+                'api-token-' . $deviceId,  // Unique token name per device
+                ['*', 'device_id:' . $deviceId]  // ← IMPORTANT: Add device_id to abilities!
+            )->plainTextToken;
+
+            // Clear failure count on success
             Cache::forget($failureKey);
 
-            // Check if device already exists for this user
-            $device = DeviceSession::where('user_id', $user->id)
-                ->where('device_id', $deviceId)
-                ->whereNull('deleted_at')
-                ->first();
-
-            if ($device) {
-                // Device already registered - Update last activity
-                $device->update([
-                    'last_activity_at' => now(),
-                    'updated_by' => $user->id,
-                ]);
-
-                Log::info('Device session updated', [
-                    'user_id' => $user->id,
-                    'device_id' => $deviceId,
-                    'device_name' => $deviceName,
-                ]);
-            } else {
-                // New device - Check device limit (max 5 devices per user)
-                $existingDevices = DeviceSession::where('user_id', $user->id)
-                    ->whereNull('deleted_at')
-                    ->count();
-
-                $deviceLimit = config('app.device_limit', self::DEVICE_LIMIT);
-
-                if ($existingDevices >= $deviceLimit) {
-                    Log::warning('Device limit exceeded', [
-                        'user_id' => $user->id,
-                        'existing_devices' => $existingDevices,
-                        'device_limit' => $deviceLimit,
-                    ]);
-
-                    OtpAttemptLog::create([
-                        'user_id' => $user->id,
-                        'mobile' => $mobile,
-                        'action' => 'verify_failed_device_limit',
-                        'ip_address' => $this->request->ip(),
-                        'user_agent' => $this->request->userAgent(),
-                        'created_by' => $user->id,
-                        'updated_by' => $user->id,
-                    ]);
-
-                    throw new AuthenticationException(
-                        ErrorCodeEnum::AUTH_FORBIDDEN,
-                        "Maximum device limit ({$deviceLimit}) reached. Please use an existing registered device or contact admin"
-                    );
-                }
-
-                // Create new device session
-                $device = DeviceSession::create([
-                    'user_id' => $user->id,
-                    'device_id' => $deviceId,
-                    'device_name' => $deviceName,
-                    'platform' => $platform,
-                    'ip_address' => $this->request->ip(),
-                    'user_agent' => $this->request->userAgent(),
-                    'last_activity_at' => now(),
-                    'created_by' => $user->id,
-                    'updated_by' => $user->id,
-                ]);
-
-                Log::info('New device session created', [
-                    'user_id' => $user->id,
-                    'device_id' => $deviceId,
-                    'device_name' => $deviceName,
-                    'platform' => $platform,
-                    'total_devices' => $existingDevices + 1,
-                ]);
-            }
-
-            // Create API token with device binding
-            $expiresAt = now()->addHours(self::TOKEN_EXPIRY_HOURS);
-            $token = $user->createToken(
-                'auth-token',
-                ['*'],
-                $expiresAt
-            );
-
-            // Log successful verification
-            OtpAttemptLog::create([
+            \Log::info('OTP verified and token created', [
                 'user_id' => $user->id,
                 'mobile' => $mobile,
-                'action' => 'verify_success',
-                'ip_address' => $this->request->ip(),
-                'user_agent' => $this->request->userAgent(),
-                'created_by' => $user->id,
-                'updated_by' => $user->id,
-            ]);
-
-            Log::info('OTP verified successfully', [
-                'user_id' => $user->id,
-                'mobile' => $mobile,
-                'device' => $deviceName,
+                'device_id' => $deviceId,
+                'token_created_at' => now()->toIso8601String(),
             ]);
 
             return [
                 'success' => true,
+                'http_status' => 200,
                 'data' => [
-                    'token' => $token->plainTextToken,
+                    'token' => $token,
+                    'token_type' => 'Bearer',
                     'user' => [
                         'id' => $user->id,
+                        'code' => $user->code,
                         'name' => $user->name,
                         'email' => $user->email,
                         'mobile' => $user->mobile,
-                        'is_active' => (bool) $user->is_active,
+                        'is_active' => $user->is_active,
+                        'created_at' => $user->created_at?->toIso8601String(),
                     ],
                     'device' => [
-                        'id' => $device->id,
-                        'device_id' => $device->device_id,
-                        'device_name' => $device->device_name,
-                        'platform' => $device->platform,
+                        'id' => $deviceSession->id,
+                        'device_id' => $deviceSession->device_id,
+                        'device_name' => $deviceSession->device_name,
+                        'platform' => $deviceSession->platform,
+                        'last_active_at' => $deviceSession->last_active_at?->toIso8601String(),
                     ],
                 ],
             ];
-        } catch (\Exception $e) {
-            Log::error('Error verifying OTP', [
+        } catch (AuthenticationException $e) {
+            \Log::warning('OTP verification failed - ' . $e->getMessage(), [
                 'mobile' => $mobile ?? null,
+                'device_id' => $deviceId ?? null,
+            ]);
+            throw $e;
+        } catch (ValidationException $e) {
+            \Log::warning('OTP verification validation failed', [
+                'mobile' => $mobile ?? null,
+                'errors' => $e->getErrors(),
+            ]);
+            throw $e;
+        } catch (\Throwable $e) {
+            \Log::error('Error verifying OTP', [
+                'mobile' => $mobile ?? null,
+                'device_id' => $deviceId ?? null,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -582,14 +532,14 @@ class AuthService
             // Get device sessions
             $devices = DeviceSession::where('user_id', $user->id)
                 ->whereNull('deleted_at')
-                ->select('id', 'device_id', 'device_name', 'platform', 'last_activity_at', 'created_at')
+                ->select('id', 'device_id', 'device_name', 'platform', 'last_active_at', 'created_at')
                 ->get()
                 ->map(fn($d) => [
                     'id' => $d->id,
                     'device_id' => $d->device_id,
                     'device_name' => $d->device_name,
                     'platform' => $d->platform,
-                    'last_activity_at' => $d->last_activity_at,
+                    'last_active_at' => $d->last_active_at,
                     'created_at' => $d->created_at,
                 ])
                 ->toArray();

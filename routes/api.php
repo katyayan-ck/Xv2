@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\SystemSettingApiController;
+use App\Http\Controllers\Api\V1\NotificationController;
 
 Route::prefix('v1')->group(function () {
 
@@ -34,7 +35,27 @@ Route::prefix('v1')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])
                 ->name('api.auth.logout');
         });
+        // Device Management
+        Route::post('/devices/register', [NotificationController::class, 'registerDevice']);
+        Route::get('/devices', [NotificationController::class, 'getDevices']);
+        Route::delete('/devices/{id}', [NotificationController::class, 'revokeDevice']);
+        Route::post('/devices/revoke-all', [NotificationController::class, 'revokeAllDevices']);
 
+        // Notifications
+        Route::get('/notifications', [NotificationController::class, 'getNotifications']);
+        Route::get('/notifications/unread', [NotificationController::class, 'getUnreadNotifications']);
+        Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/{id}', [NotificationController::class, 'deleteNotification']);
+
+        // Alerts
+        Route::get('/alerts', [NotificationController::class, 'getAlerts']);
+        Route::post('/alerts/{id}/read', [NotificationController::class, 'markAlertAsRead']);
+
+        // Messages
+        Route::get('/messages/user/{user_id}', [NotificationController::class, 'getConversation']);
+        Route::post('/messages/user/{user_id}', [NotificationController::class, 'sendMessage']);
+        Route::post('/messages/{id}/read', [NotificationController::class, 'markMessageAsRead']);
         // System Settings routes (protected)
         Route::prefix('system-settings')->group(function () {
 
