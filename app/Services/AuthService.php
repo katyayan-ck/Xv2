@@ -49,559 +49,320 @@ class AuthService
     private const MAX_OTP_ATTEMPTS = 5;
     private const OTP_ATTEMPT_WINDOW_MINUTES = 15;
     private const ACCOUNT_LOCK_DURATION_MINUTES = 30;
-    private const DEVICE_LIMIT = 2;
-    private const TOKEN_EXPIRY_HOURS = 24;
+    private const DEVICE_LIMIT = 5;
 
-    /**
-     * HTTP Request instance
-     */
     protected Request $request;
-
-    /**
-     * Notification Service instance
-     */
+    protected CacheManager $cache;
     protected OtpNotificationService $notificationService;
 
-    /**
-     * Constructor
-     * 
-     * @param Request $request HTTP request (injected by Laravel)
-     * @param OtpNotificationService $notificationService Notification service
-     */
-    public function __construct(Request $request, OtpNotificationService $notificationService)
-    {
+    public function __construct(
+        Request $request,
+        CacheManager $cache,
+        OtpNotificationService $notificationService
+    ) {
         $this->request = $request;
+        $this->cache = $cache;
         $this->notificationService = $notificationService;
     }
 
     /**
-     * Request OTP for login
+     * Request OTP
      * 
-     * Generates a 6-digit OTP, stores it in database with hash,
-     * implements rate limiting, and sends via Email and SMS.
+     * Validates mobile, checks registration, rate limits, generates OTP,
+     * sends via email/SMS, and logs the attempt.
      * 
-     * Validates:
-     * - Mobile format (10 digits, numeric)
-     * - User exists with this mobile (CHECKS DATABASE)
-     * - Account not locked
-     * - Rate limit not exceeded (3 requests per 15 minutes)
-     * 
-     * @param string $mobile Mobile number (10 digits)
-     * @return array Success response with expires_at
-     * @throws ValidationException If mobile invalid
-     * @throws AuthenticationException If user not found
-     * @throws AccountLockedException If account locked
-     * @throws RateLimitException If rate limit exceeded
+     * @param string $mobile Mobile number
+     * @param Request $request HTTP request for IP/user agent
+     * @return array Response data
+     * @throws ValidationException Invalid mobile format
+     * @throws AuthenticationException User not found/inactive
+     * @throws RateLimitException Too many requests
      */
-    public function requestOtp(string $mobile): array
+    public function requestOtp(string $mobile, Request $request): array
     {
         try {
-            // Clean mobile number - remove non-digits
-            $mobile = preg_replace('/[^0-9]/', '', $mobile);
-
             // Validate mobile format
             if (!$this->isValidMobile($mobile)) {
                 throw new ValidationException(
-                    'Invalid mobile number format',
-                    ['mobile' => 'Mobile must be exactly 10 digits']
+                    'Invalid mobile number format. Must be 10-digit number.',
+                    ['mobile' => ['Invalid format']],
+                    ErrorCodeEnum::AUTH_MOBILE_INVALID
                 );
             }
 
-            // ✅ CHECK IF USER EXISTS IN DATABASE
-            $user = User::where('mobile', $mobile)
-                ->whereNull('deleted_at')
-                ->first();
+            // Check rate limit for OTP requests
+            $this->checkOtpRequestRateLimit($mobile);
+
+            // Find user by mobile
+            $user = User::where('mobile', $mobile)->first();
 
             if (!$user) {
-                Log::warning('OTP request for non-existent mobile', [
-                    'mobile' => $mobile,
-                    'ip_address' => $this->request->ip(),
-                ]);
-
-                // ✅ Throw authentication exception - user not found
                 throw new AuthenticationException(
                     ErrorCodeEnum::AUTH_USER_NOT_FOUND,
                     "Mobile number '{$mobile}' not registered in system"
                 );
             }
 
+            if (!$user->is_active) {
+                throw new AuthenticationException(
+                    ErrorCodeEnum::AUTH_USER_INACTIVE,
+                    'User account is inactive. Contact support.'
+                );
+            }
+
             // Check if account is locked
-            $lockKey = "account_lock:{$mobile}";
-            if (Cache::has($lockKey)) {
-                Log::warning('Attempt to request OTP for locked account', [
-                    'mobile' => $mobile,
-                    'user_id' => $user->id,
-                    'ip_address' => $this->request->ip(),
-                ]);
+            $this->checkAccountLock($mobile);
 
-                throw new AccountLockedException(
-                    'Account locked due to multiple failed attempts'
-                );
-            }
+            // Generate OTP
+            $otp = $this->generateOtp();
 
-            // Check rate limit: max 3 OTP requests per 15 minutes
-            $rateLimitKey = "otp_request:{$mobile}";
-            $requestCount = Cache::get($rateLimitKey, 0);
-
-            if ($requestCount >= self::MAX_OTP_REQUESTS) {
-                Log::warning('OTP request rate limit exceeded', [
-                    'mobile' => $mobile,
-                    'user_id' => $user->id,
-                    'requests' => $requestCount,
-                ]);
-
-                throw new RateLimitException(
-                    'OTP requests',
-                    self::MAX_OTP_REQUESTS,
-                    self::OTP_REQUEST_WINDOW_MINUTES * 60
-                );
-            }
-
-            // Generate 6-digit OTP
-            $otp = str_pad(random_int(0, 999999), self::OTP_LENGTH, '0', STR_PAD_LEFT);
-            $expiresAt = now()->addMinutes(self::OTP_EXPIRY_MINUTES);
-
-            // Delete previous OTP for this mobile
-            OtpToken::where('mobile', $mobile)->delete();
-
-            // Create new OTP token with hash
-            $otpToken = OtpToken::create([
+            // Create OTP token
+            $token = OtpToken::create([
                 'user_id' => $user->id,
                 'mobile' => $mobile,
                 'otp_hash' => Hash::make($otp),
-                'expires_at' => $expiresAt,
+                'expires_at' => now()->addMinutes(self::OTP_EXPIRY_MINUTES),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
             ]);
 
-            // Log the request
+            // Send notifications
+            $emailSent = $this->notificationService->sendViaEmail($user->email, $otp, $mobile);
+            $smsSent = $this->notificationService->sendViaSms($mobile, $otp);
+
+            Log::info('OTP notification sent', [
+                'email_sent' => $emailSent,
+                'sms_sent' => $smsSent,
+                'mobile' => $mobile,
+            ]);
+
+            // Log attempt
             OtpAttemptLog::create([
                 'user_id' => $user->id,
                 'mobile' => $mobile,
                 'action' => 'request',
-                'ip_address' => $this->request->ip(),
-                'user_agent' => $this->request->userAgent(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
             ]);
 
-            // ✅ SEND OTP VIA EMAIL AND SMS
-            try {
-                $this->notificationService->sendViaEmailAndSms(
-                    $user->email,
-                    $mobile,
-                    $otp
-                );
-
-                Log::info('OTP notification sent', [
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'method' => 'email_and_sms',
-                ]);
-            } catch (\Exception $e) {
-                Log::error('Failed to send OTP notification', [
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'error' => $e->getMessage(),
-                ]);
-                // Don't break flow - OTP still created even if notification fails
-            }
-
-            // Increment rate limit counter
-            Cache::put(
-                $rateLimitKey,
-                $requestCount + 1,
-                now()->addMinutes(self::OTP_REQUEST_WINDOW_MINUTES)
-            );
-
             Log::info('OTP requested successfully', [
                 'user_id' => $user->id,
                 'mobile' => $mobile,
-                'expires_at' => $expiresAt,
+                'expires_at' => $token->expires_at->toIso8601String(),
             ]);
+
+            $data = [
+                'mobile' => $mobile,
+                'expires_at' => $token->expires_at->toIso8601String(),
+                'expires_in_minutes' => self::OTP_EXPIRY_MINUTES,
+            ];
+
+            // Add OTP in local environment for testing
+            if (app()->environment('local')) {
+                $data['otp'] = $otp;
+            }
 
             return [
                 'success' => true,
-                'data' => [
-                    'mobile' => $mobile,
-                    'expires_at' => $expiresAt->toIso8601String(),
-                    'expires_in_minutes' => self::OTP_EXPIRY_MINUTES,
-                    'otp' => config('app.debug') ? $otp : null, // Only in debug mode
-                ],
+                'message' => 'OTP sent to your registered mobile and email',
+                'data' => $data,
             ];
-        } catch (\Exception $e) {
+        } catch (Throwable $e) {
             Log::error('Error requesting OTP', [
-                'mobile' => $mobile ?? null,
+                'mobile' => $mobile,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
             throw $e;
         }
     }
 
+
     /**
-     * Verify OTP and create authenticated session
+     * Verify OTP
      * 
-     * Validates OTP, creates device session, generates Sanctum token,
-     * and handles device limit checks.
+     * Validates OTP, checks expiration, rate limits attempts,
+     * binds device, issues Sanctum token, and logs the session.
      * 
-     * @param string $mobile Mobile number (10 digits)
-     * @param string $otp OTP code (6 digits)
-     * @param string $deviceId Unique device identifier (UUID)
-     * @param string $deviceName Device name/model
-     * @param string $platform Platform (iOS, Android, Web)
-     * @return array Success response with token and user data
-     * @throws ValidationException If inputs invalid
-     * @throws AuthenticationException If OTP invalid/expired
-     * @throws AccountLockedException If account locked
+     * @param string $mobile
+     * @param string $otp
+     * @param string $deviceId
+     * @param string $deviceName
+     * @param string $platform
+     * @param Request $request HTTP request for IP/user agent
+     * @return array Response data with token and user details
+     * @throws AuthenticationException Invalid/expired OTP or user issues
+     * @throws RateLimitException Too many attempts
+     * @throws AccountLockedException Account locked
+     * @throws ApplicationException Device limit exceeded or binding failed
      */
     public function verifyOtp(
         string $mobile,
         string $otp,
         string $deviceId,
         string $deviceName,
-        string $platform
+        string $platform,
+        Request $request
     ): array {
         try {
-            // Clean mobile number - remove non-digits
-            $mobile = preg_replace('/[^0-9]/', '', $mobile);
-
-            // Validate inputs
-            if (!$this->isValidMobile($mobile)) {
-                throw new ValidationException(
-                    'Invalid mobile number format',
-                    ['mobile' => ['Mobile must be exactly 10 digits']]
-                );
-            }
-
-            if (strlen($otp) != self::OTP_LENGTH || !ctype_digit($otp)) {
-                throw new ValidationException(
-                    'Invalid OTP format',
-                    ['otp' => ['OTP must be 6 digits']]
-                );
-            }
-
-            if (empty($deviceId) || empty($deviceName) || empty($platform)) {
-                throw new ValidationException(
-                    'Missing device information',
-                    [
-                        'device_id' => ['Device ID is required'],
-                        'device_name' => ['Device name is required'],
-                        'platform' => ['Platform is required'],
-                    ]
-                );
-            }
-
-            // FIND USER IN DATABASE
-            $user = User::where('mobile', $mobile)
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!$user) {
-                throw new AuthenticationException(
-                    ErrorCodeEnum::AUTH_USER_NOT_FOUND,
-                    'Mobile number ' . $mobile . ' not registered'
-                );
-            }
+            // Check rate limit for OTP attempts
+            $this->checkOtpAttemptRateLimit($mobile);
 
             // Check if account is locked
-            $lockKey = 'account_lock_' . $mobile;
-            if (Cache::has($lockKey)) {
-                \Log::warning('OTP verification attempt on locked account', [
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'ip_address' => $this->request->ip(),
-                ]);
+            $this->checkAccountLock($mobile);
 
-                throw new AccountLockedException(
-                    'Account locked due to multiple failed attempts'
-                );
-            }
-
-            // Check rate limit - max 5 verification attempts per 15 minutes
-            $failureKey = 'otp_failures_' . $mobile;
-            $failureCount = Cache::get($failureKey, 0);
-
-            if ($failureCount >= self::MAX_OTP_ATTEMPTS) {
-                \Log::warning('OTP verification rate limit exceeded', [
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'attempts' => $failureCount,
-                ]);
-
-                // Lock account for 30 minutes
-                Cache::put(
-                    $lockKey,
-                    true,
-                    now()->addMinutes(self::ACCOUNT_LOCK_DURATION_MINUTES)
-                );
-
-                OtpAttemptLog::create([
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'action' => 'verify_blocked',
-                    'ip_address' => $this->request->ip(),
-                    'user_agent' => $this->request->userAgent(),
-                    'created_by' => $user->id,
-                    'updated_by' => $user->id,
-                ]);
-
-                throw new AccountLockedException(
-                    'Account locked due to too many failed OTP attempts'
-                );
-            }
-
-            // GET LATEST OTP TOKEN (not expired, not used)
-            $otpToken = OtpToken::where('user_id', $user->id)
-                ->where('mobile', $mobile)
-                ->where('expires_at', '>', now())
-                ->whereNull('used_at')
-                ->orderBy('created_at', 'desc')
+            // Find latest valid OTP token
+            $token = OtpToken::where('mobile', $mobile)
+                ->latest('created_at')
                 ->first();
 
-            if (!$otpToken) {
-                \Log::warning('OTP not found or expired', [
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                ]);
-
-                // Increment failure count
-                Cache::put(
-                    $failureKey,
-                    $failureCount + 1,
-                    now()->addMinutes(self::OTP_ATTEMPT_WINDOW_MINUTES)
-                );
-
-                OtpAttemptLog::create([
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'action' => 'verify_failed',
-                    'ip_address' => $this->request->ip(),
-                    'user_agent' => $this->request->userAgent(),
-                    'created_by' => $user->id,
-                    'updated_by' => $user->id,
-                ]);
-
+            if (!$token) {
+                $this->logFailedAttempt($mobile, 'verification', 'No OTP found', $request);
                 throw new AuthenticationException(
-                    ErrorCodeEnum::AUTH_OTP_EXPIRED,
-                    'OTP expired. Request a new one'
-                );
-            }
-
-            // VERIFY OTP HASH
-            if (!Hash::check($otp, $otpToken->otp_hash)) {
-                \Log::warning('Invalid OTP provided', [
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                ]);
-
-                // Increment failure count
-                $newFailureCount = $failureCount + 1;
-                Cache::put(
-                    $failureKey,
-                    $newFailureCount,
-                    now()->addMinutes(self::OTP_ATTEMPT_WINDOW_MINUTES)
-                );
-
-                // Lock account after 5 failures
-                if ($newFailureCount >= self::MAX_OTP_ATTEMPTS) {
-                    Cache::put(
-                        $lockKey,
-                        true,
-                        now()->addMinutes(self::ACCOUNT_LOCK_DURATION_MINUTES)
-                    );
-                }
-
-                OtpAttemptLog::create([
-                    'user_id' => $user->id,
-                    'mobile' => $mobile,
-                    'action' => 'verify_failed',
-                    'ip_address' => $this->request->ip(),
-                    'user_agent' => $this->request->userAgent(),
-                    'created_by' => $user->id,
-                    'updated_by' => $user->id,
-                ]);
-
-                throw new AuthenticationException(
-                    ErrorCodeEnum::AUTH_INVALID_OTP,
+                    ErrorCodeEnum::AUTH_OTP_INVALID,
                     'Invalid OTP'
                 );
             }
 
-            // ✅ CRITICAL: Create device session FIRST (before token)
-            $deviceSession = DeviceSession::create([
-                'user_id' => $user->id,
-                'device_id' => $deviceId,
-                'device_name' => $deviceName,
-                'platform' => $platform,
-                'ip_address' => $this->request->ip(),
-                'user_agent' => $this->request->userAgent(),
-                'last_active_at' => now(),
-                'created_by' => $user->id,
-                'updated_by' => $user->id,
-            ]);
+            // Check expiration
+            if ($token->expires_at < now()) {
+                $this->logFailedAttempt($mobile, 'verification', 'OTP expired', $request, $token->user_id);
+                throw new AuthenticationException(
+                    ErrorCodeEnum::AUTH_OTP_EXPIRED,
+                    'OTP has expired. Request a new one.'
+                );
+            }
 
-            // ✅ CRITICAL: Mark OTP as used
-            $otpToken->update([
+            // Verify OTP hash
+            if (!Hash::check($otp, $token->otp_hash)) {
+                $this->logFailedAttempt($mobile, 'verification', 'Invalid OTP', $request, $token->user_id);
+                $this->checkFailedAttemptsLock($mobile);
+                throw new AuthenticationException(
+                    ErrorCodeEnum::AUTH_OTP_INVALID,
+                    'Invalid OTP'
+                );
+            }
+
+            // Get user
+            $user = User::findOrFail($token->user_id);
+
+            // Check device limit
+            $this->checkDeviceLimit($user);
+
+            // Create or update device session
+            $session = DeviceSession::updateOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'device_id' => $deviceId,
+                ],
+                [
+                    'device_name' => $deviceName,
+                    'platform' => $platform,
+                    'last_active_at' => now(),
+                    'created_by' => $user->id,
+                    'updated_by' => $user->id,
+                ]
+            );
+
+            // Issue Sanctum token with device_id in abilities
+            $authToken = $user->createToken(
+                'auth_token',
+                ['*', "device_id:{$deviceId}"],
+                now()->addDays(30)  // Adjust as needed
+            );
+
+            // Mark OTP as used
+            $token->update([
                 'used_at' => now(),
                 'updated_by' => $user->id,
             ]);
 
-            // ✅ CRITICAL FIX: Create token WITH device_id in abilities!
-            // Format: ['*', 'device_id:xxxxx'] - this is what ValidateDevice middleware looks for
-            $token = $user->createToken(
-                'api-token-' . $deviceId,  // Unique token name per device
-                ['*', 'device_id:' . $deviceId]  // ← IMPORTANT: Add device_id to abilities!
-            )->plainTextToken;
+            // Log successful verification
+            OtpAttemptLog::create([
+                'user_id' => $user->id,
+                'mobile' => $mobile,
+                'action' => 'verification',
+                'status' => 'success',
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
 
-            // Clear failure count on success
-            Cache::forget($failureKey);
+            // Clear failed attempts cache
+            $this->clearFailedAttemptsCache($mobile);
 
-            \Log::info('OTP verified and token created', [
+            Log::info('OTP verified successfully', [
                 'user_id' => $user->id,
                 'mobile' => $mobile,
                 'device_id' => $deviceId,
-                'token_created_at' => now()->toIso8601String(),
             ]);
 
             return [
                 'success' => true,
-                'http_status' => 200,
+                'message' => 'OTP verified',
                 'data' => [
-                    'token' => $token,
-                    'token_type' => 'Bearer',
+                    'token' => $authToken->plainTextToken,
+                    'expires_at' => $authToken->accessToken->expires_at->toIso8601String(),
                     'user' => [
                         'id' => $user->id,
-                        'code' => $user->code,
                         'name' => $user->name,
                         'email' => $user->email,
                         'mobile' => $user->mobile,
-                        'is_active' => $user->is_active,
-                        'created_at' => $user->created_at?->toIso8601String(),
-                    ],
-                    'device' => [
-                        'id' => $deviceSession->id,
-                        'device_id' => $deviceSession->device_id,
-                        'device_name' => $deviceSession->device_name,
-                        'platform' => $deviceSession->platform,
-                        'last_active_at' => $deviceSession->last_active_at?->toIso8601String(),
+                        'role' => $user->getRoleNames()->first() ?? 'user',
                     ],
                 ],
             ];
-        } catch (AuthenticationException $e) {
-            \Log::warning('OTP verification failed - ' . $e->getMessage(), [
-                'mobile' => $mobile ?? null,
-                'device_id' => $deviceId ?? null,
-            ]);
-            throw $e;
-        } catch (ValidationException $e) {
-            \Log::warning('OTP verification validation failed', [
-                'mobile' => $mobile ?? null,
-                'errors' => $e->getErrors(),
-            ]);
-            throw $e;
-        } catch (\Throwable $e) {
-            \Log::error('Error verifying OTP', [
-                'mobile' => $mobile ?? null,
-                'device_id' => $deviceId ?? null,
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            throw new AuthenticationException(
+                ErrorCodeEnum::AUTH_USER_NOT_FOUND,
+                'User not found'
+            );
+        } catch (Throwable $e) {
+            Log::error('Error verifying OTP', [
+                'mobile' => $mobile,
+                'device_id' => $deviceId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
             throw $e;
         }
     }
 
+
     /**
-     * Get current authenticated user details
+     * Get user details
      * 
-     * @param User $user The authenticated user
-     * @return array User details with sessions and roles
+     * Retrieves authenticated user profile with roles and permissions.
+     * 
+     * @param User $user Authenticated user
+     * @return array User data
      */
     public function getUserDetails(User $user): array
     {
-        try {
-            // Refresh user from database
-            $user = User::find($user->id);
-            if (!$user) {
-                throw new AuthenticationException(
-                    ErrorCodeEnum::AUTH_USER_NOT_FOUND,
-                    'User not found'
-                );
-            }
-
-            // Get device sessions
-            $devices = DeviceSession::where('user_id', $user->id)
-                ->whereNull('deleted_at')
-                ->select('id', 'device_id', 'device_name', 'platform', 'last_active_at', 'created_at')
-                ->get()
-                ->map(fn($d) => [
-                    'id' => $d->id,
-                    'device_id' => $d->device_id,
-                    'device_name' => $d->device_name,
-                    'platform' => $d->platform,
-                    'last_active_at' => $d->last_active_at,
-                    'created_at' => $d->created_at,
-                ])
-                ->toArray();
-
-            // Get role assignments
-            $roleAssignments = $user->roleAssignments()
-                ->where('is_current', true)
-                ->where(function ($q) {
-                    $q->whereNull('to_date')->orWhere('to_date', '>', now());
-                })
-                ->select('id', 'role_id', 'from_date', 'to_date', 'is_current')
-                ->get()
-                ->map(fn($a) => [
-                    'id' => $a->id,
-                    'role_id' => $a->role_id,
-                    'from_date' => $a->from_date,
-                    'to_date' => $a->to_date,
-                    'is_current' => (bool) $a->is_current,
-                ])
-                ->toArray();
-
-            // Get current token
-            $currentToken = $user->currentAccessToken();
-
-            Log::info('User details retrieved', [
-                'user_id' => $user->id,
+        return [
+            'success' => true,
+            'message' => 'User profile retrieved',
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
                 'email' => $user->email,
-            ]);
-
-            return [
-                'success' => true,
-                'data' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'mobile' => $user->mobile,
-                    'code' => $user->code ?? null,
-                    'is_active' => (bool) $user->is_active,
-                    'created_at' => $user->created_at,
-                    'last_login_at' => $user->last_login_at,
-                    'role_assignments' => $roleAssignments,
-                    'devices' => $devices,
-                    'current_token' => $currentToken ? [
-                        'abilities' => $currentToken->abilities,
-                        'last_used_at' => $currentToken->last_used_at,
-                    ] : null,
-                ],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error retrieving user details', [
-                'user_id' => $user->id ?? null,
-                'error' => $e->getMessage(),
-            ]);
-            throw $e;
-        }
+                'mobile' => $user->mobile,
+                'role' => $user->getRoleNames()->first() ?? 'user',
+                'permissions' => $user->getAllPermissions()->pluck('name'),
+            ],
+        ];
     }
 
     /**
-     * Logout user and revoke current token
+     * Logout user
      * 
-     * @param User $user The authenticated user
-     * @return array Success response
+     * Revokes current authentication token and logs the action.
+     * 
+     * @param User $user Authenticated user
+     * @return array Response data
      */
     public function logout(User $user): array
     {
@@ -657,5 +418,209 @@ class AuthService
 
         // Check if it's 10 digits and numeric
         return strlen($cleaned) === 10 && is_numeric($cleaned);
+    }
+
+    /**
+     * Generate random OTP
+     * 
+     * @return string OTP code
+     */
+    private function generateOtp(): string
+    {
+        return str_pad(rand(0, pow(10, self::OTP_LENGTH) - 1), self::OTP_LENGTH, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Check OTP request rate limit
+     * 
+     * @param string $mobile
+     * @throws RateLimitException
+     */
+    private function checkOtpRequestRateLimit(string $mobile): void
+    {
+        $key = "otp_request_count_{$mobile}";
+        $count = Cache::get($key, 0);
+
+        if ($count >= self::MAX_OTP_REQUESTS) {
+            throw new RateLimitException(
+                'OTP requests',
+                self::MAX_OTP_REQUESTS,
+                self::OTP_REQUEST_WINDOW_MINUTES * 60
+            );
+        }
+
+        Cache::put($key, $count + 1, self::OTP_REQUEST_WINDOW_MINUTES * 60);
+    }
+
+    /**
+     * Check OTP attempt rate limit
+     * 
+     * @param string $mobile
+     * @throws RateLimitException
+     */
+    private function checkOtpAttemptRateLimit(string $mobile): void
+    {
+        $key = "otp_attempt_count_{$mobile}";
+        $count = Cache::get($key, 0);
+
+        if ($count >= self::MAX_OTP_ATTEMPTS) {
+            $this->lockAccount($mobile);
+            throw new AccountLockedException(
+                'Too many failed OTP attempts',
+                self::ACCOUNT_LOCK_DURATION_MINUTES
+            );
+        }
+
+        Cache::put($key, $count + 1, self::OTP_ATTEMPT_WINDOW_MINUTES * 60);
+    }
+
+    /**
+     * Check if account is locked
+     * 
+     * @param string $mobile
+     * @throws AccountLockedException
+     */
+    private function checkAccountLock(string $mobile): void
+    {
+        $lockKey = "account_lock_{$mobile}";
+        if (Cache::has($lockKey)) {
+            throw new AccountLockedException(
+                'Account locked due to multiple failed attempts',
+                self::ACCOUNT_LOCK_DURATION_MINUTES
+            );
+        }
+    }
+
+    /**
+     * Lock account
+     * 
+     * @param string $mobile
+     * @return void
+     */
+    private function lockAccount(string $mobile): void
+    {
+        $lockKey = "account_lock_{$mobile}";
+        Cache::put($lockKey, true, self::ACCOUNT_LOCK_DURATION_MINUTES * 60);
+
+        // Find user and send notification
+        $user = User::where('mobile', $mobile)->first();
+        if ($user) {
+            $this->notificationService->sendAccountLockedEmail(
+                $user->email,
+                $mobile,
+                'multiple failed OTP attempts'
+            );
+        }
+
+        Log::warning('Account locked', ['mobile' => $mobile]);
+    }
+
+    /**
+     * Log failed OTP attempt
+     * 
+     * @param string $mobile
+     * @param string $action
+     * @param string $reason
+     * @param Request $request
+     * @param int|null $userId
+     * @return void
+     */
+    private function logFailedAttempt(
+        string $mobile,
+        string $action,
+        string $reason,
+        Request $request,
+        ?int $userId = null
+    ): void {
+        OtpAttemptLog::create([
+            'user_id' => $userId,
+            'mobile' => $mobile,
+            'action' => $action,
+            'status' => 'failed',
+            'notes' => $reason,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_by' => $userId,
+            'updated_by' => $userId,
+        ]);
+
+        Log::warning('Failed OTP attempt', [
+            'mobile' => $mobile,
+            'reason' => $reason,
+        ]);
+    }
+
+    /**
+     * Check failed attempts and lock if exceeded
+     * 
+     * @param string $mobile
+     * @return void
+     */
+    private function checkFailedAttemptsLock(string $mobile): void
+    {
+        $key = "otp_attempt_count_{$mobile}";
+        $count = Cache::get($key, 0);
+
+        if ($count >= self::MAX_OTP_ATTEMPTS) {
+            $this->lockAccount($mobile);
+        }
+    }
+
+    /**
+     * Clear failed attempts cache
+     * 
+     * @param string $mobile
+     * @return void
+     */
+    private function clearFailedAttemptsCache(string $mobile): void
+    {
+        Cache::forget("otp_attempt_count_{$mobile}");
+    }
+
+    /**
+     * Check device limit
+     * 
+     * @param User $user
+     * @throws ApplicationException
+     */
+    private function checkDeviceLimit(User $user): void
+    {
+        $activeSessions = DeviceSession::where('user_id', $user->id)
+            ->where('last_active_at', '>', now()->subDays(30))  // Consider sessions active in last 30 days
+            ->count();
+
+        if ($activeSessions >= self::DEVICE_LIMIT) {
+            throw new ApplicationException(
+                'Device limit exceeded. Maximum ' . self::DEVICE_LIMIT . ' devices allowed.',
+                ErrorCodeEnum::AUTH_DEVICE_BINDING_FAILED,
+                403
+            );
+        }
+    }
+
+    /**
+     * Create device session
+     * 
+     * @param User $user
+     * @param string $deviceId
+     * @param string $deviceName
+     * @param string $platform
+     * @return DeviceSession
+     */
+    private function createDeviceSession(User $user, string $deviceId, string $deviceName, string $platform): DeviceSession
+    {
+        return DeviceSession::updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'device_id' => $deviceId,
+            ],
+            [
+                'device_name' => $deviceName,
+                'platform' => $platform,
+                'last_active_at' => now(),
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]
+        );
     }
 }
