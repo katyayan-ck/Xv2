@@ -35,7 +35,11 @@ Route::prefix('v1')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])
                 ->name('api.auth.logout');
         });
-        // Device Management
+
+        //CommMasters routes (protected)
+        Route::get('history/{entityType}/{entityId}', [EntityHistoryController::class, 'getHistory']);
+        Route::post('history/{entityType}/{entityId}/thread', [EntityHistoryController::class, 'addThread']);
+
         Route::post('/devices/register', [NotificationController::class, 'registerDevice']);
         Route::get('/devices', [NotificationController::class, 'getDevices']);
         Route::delete('/devices/{id}', [NotificationController::class, 'revokeDevice']);
