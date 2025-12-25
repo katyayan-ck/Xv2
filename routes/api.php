@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\SystemSettingApiController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\DocController;
+use App\Http\Controllers\Api\V1\EntityHistoryController;
 
 Route::prefix('v1')->group(function () {
 
@@ -35,6 +37,17 @@ Route::prefix('v1')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])
                 ->name('api.auth.logout');
         });
+
+        //DocManager Routes
+        Route::post('docs/upload', [DocController::class, 'upload']);
+        Route::get('docs/my', [DocController::class, 'getMyDocs']);
+        Route::post('docs/groups', [DocController::class, 'createGroup']);
+        Route::post('docs/groups/{groupId}/add', [DocController::class, 'addToGroup']);
+        Route::delete('docs/groups/{groupId}/remove/{docId}', [DocController::class, 'removeFromGroup']);
+        Route::get('docs/groups/{groupId}/zip', [DocController::class, 'downloadGroupZip']);
+        Route::get('docs/search', [DocController::class, 'search']);
+        Route::get('docs/analytics', [DocController::class, 'getAnalytics']);
+        Route::post('docs/{docId}/approve', [DocController::class, 'approve']);
 
         //CommMasters routes (protected)
         Route::get('history/{entityType}/{entityId}', [EntityHistoryController::class, 'getHistory']);

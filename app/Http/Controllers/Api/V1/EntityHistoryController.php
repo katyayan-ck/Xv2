@@ -6,6 +6,7 @@ use App\Http\Controllers\BaseController;
 use App\Services\EntityHistoryService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Models\Core\CommThread;
 use Throwable;
 
 /**

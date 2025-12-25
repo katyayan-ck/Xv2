@@ -13,6 +13,7 @@
         "backpack/crud": "^7.0",
         "backpack/theme-tabler": "^2.0",
         "darkaonline/l5-swagger": "^9.0",
+        "google/cloud-vision": "^2.1",
         "graphp/graph": "^0.9.3",
         "intervention/image": "^3.11",
         "kalnoy/nestedset": "^6.0",
