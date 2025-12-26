@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Core\Document;
 use App\Models\Core\DocGroup;
 
-
 /**
  * @OA\Tag(
  *     name="Documents",
@@ -136,10 +135,7 @@ class DocController extends BaseController
     public function getMyDocs(Request $request): JsonResponse
     {
         try {
-            $docs = Document::where('created_by', Auth::id())
-                ->orWhereHas('accesses', function ($q) {
-                    $q->where('user_id', Auth::id());
-                })->get();
+            $docs = $this->docService->getMyDocuments(Auth::user());
             return $this->successResponse($docs, 'Documents retrieved');
         } catch (Throwable $e) {
             return $this->handleException($e, 'Get My Documents');
@@ -223,7 +219,7 @@ class DocController extends BaseController
      *         required=true,
      *         @OA\JsonContent(
      *             required={"doc_id"},
-     *             @OA\Property(property="doc_id", type="integer")
+     *             @OA\Property(property="doc_id", type="integer", example=1)
      *         )
      *     ),
      *     @OA\Response(
@@ -336,7 +332,14 @@ class DocController extends BaseController
      *         required=true,
      *         @OA\Schema(type="integer")
      *     ),
-     *     @OA\Response(response=200, description="ZIP downloaded", content={"application/zip": {@OA\Schema(type="string", format="binary")}}),
+     *     @OA\Response(
+     *         response=200,
+     *         description="ZIP downloaded",
+     *         @OA\MediaType(
+     *             mediaType="application/zip",
+     *             @OA\Schema(type="string", format="binary")
+     *         )
+     *     ),
      *     @OA\Response(response=404, description="Group not found"),
      *     @OA\Response(response=401, description="Unauthorized"),
      *     @OA\Response(response=500, description="Internal server error")
@@ -373,7 +376,7 @@ class DocController extends BaseController
      *         name="query",
      *         in="query",
      *         required=true,
-     *         @OA\Schema(type="string")
+     *         @OA\Schema(type="string", example="contract")
      *     ),
      *     @OA\Response(
      *         response=200,

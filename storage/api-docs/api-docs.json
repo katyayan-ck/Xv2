@@ -24,8 +24,8 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Request OTP for login",
-                "description": "Send OTP to registered mobile and email for authentication. Returns human-readable timestamps in ISO 8601 format.",
+                "summary": "Request OTP for authentication",
+                "description": "Generate and send OTP to mobile and email",
                 "operationId": "requestOtp",
                 "requestBody": {
                     "required": true,
@@ -37,10 +37,9 @@
                                 ],
                                 "properties": {
                                     "mobile": {
-                                        "description": "10-digit mobile number",
+                                        "description": "10-digit Indian mobile number",
                                         "type": "string",
-                                        "maxLength": 10,
-                                        "example": "9876543210"
+                                        "example": "9310260721"
                                     }
                                 },
                                 "type": "object"
@@ -75,29 +74,28 @@
                                             "properties": {
                                                 "mobile": {
                                                     "type": "string",
-                                                    "example": "9876543210"
+                                                    "example": "9310260721"
                                                 },
                                                 "expires_at": {
-                                                    "description": "ISO 8601 UTC format",
                                                     "type": "string",
-                                                    "example": "2025-12-24T18:35:00Z"
+                                                    "format": "date-time",
+                                                    "example": "2025-12-24T18:40:00Z"
                                                 },
                                                 "expires_in_minutes": {
                                                     "type": "integer",
-                                                    "example": 5
+                                                    "example": 10
                                                 },
                                                 "otp": {
-                                                    "description": "Only shown in debug mode",
-                                                    "type": "string|null",
-                                                    "example": null
+                                                    "description": "OTP shown only in local environment",
+                                                    "type": "string",
+                                                    "example": "123456"
                                                 }
                                             },
                                             "type": "object"
                                         },
                                         "timestamp": {
-                                            "description": "ISO 8601 UTC format",
                                             "type": "string",
-                                            "example": "2025-12-24T18:30:00Z"
+                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -105,97 +103,14 @@
                             }
                         }
                     },
-                    "422": {
-                        "description": "Validation error - invalid mobile format",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 422
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "VALIDATION_FAILED"
-                                        },
-                                        "errors": {
-                                            "properties": {
-                                                "mobile": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "string",
-                                                        "example": "Mobile must be exactly 10 digits."
-                                                    }
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                    "400": {
+                        "description": "Invalid mobile format"
                     },
                     "404": {
-                        "description": "Mobile not registered in system",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 404
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "AUTH_USER_NOT_FOUND"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Mobile number '9876543210' not registered in system"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                        "description": "Mobile not registered"
                     },
                     "429": {
-                        "description": "Rate limit exceeded - too many OTP requests",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 429
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "RATE_LIMIT_EXCEEDED"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Max 3 OTP requests allowed within 900 seconds"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                        "description": "Too many requests"
                     },
                     "500": {
                         "description": "Internal server error"
@@ -208,8 +123,8 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Verify OTP and bind device for login",
-                "description": "Verify OTP code and create authenticated session with device binding. Returns human-readable timestamps in ISO 8601 format.",
+                "summary": "Verify OTP and get authentication token",
+                "description": "Validate OTP and issue Sanctum token",
                 "operationId": "verifyOtp",
                 "requestBody": {
                     "required": true,
@@ -226,45 +141,35 @@
                                 "properties": {
                                     "mobile": {
                                         "type": "string",
-                                        "maxLength": 10,
-                                        "example": "9876543210"
+                                        "example": "9310260721"
                                     },
                                     "otp": {
                                         "type": "string",
-                                        "maxLength": 6,
                                         "example": "123456"
                                     },
                                     "device_id": {
-                                        "description": "UUID format",
                                         "type": "string",
-                                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                                        "example": "unique-device-uuid"
                                     },
                                     "device_name": {
                                         "type": "string",
-                                        "example": "iPhone 14 Pro"
+                                        "example": "iPhone 14"
                                     },
                                     "platform": {
                                         "type": "string",
                                         "enum": [
-                                            "iOS",
-                                            "Android",
-                                            "Web"
-                                        ],
-                                        "example": "iOS"
+                                            "android",
+                                            "ios",
+                                            "web"
+                                        ]
                                     },
-                                    "device_info": {
-                                        "description": "Optional device details",
-                                        "properties": {
-                                            "os_version": {
-                                                "type": "string",
-                                                "example": "14.5"
-                                            },
-                                            "app_version": {
-                                                "type": "string",
-                                                "example": "1.0.0"
-                                            }
-                                        },
-                                        "type": "object"
+                                    "platform_version": {
+                                        "type": "string",
+                                        "example": "iOS 16.0"
+                                    },
+                                    "fcm_token": {
+                                        "type": "string",
+                                        "example": "fcm-push-token"
                                     }
                                 },
                                 "type": "object"
@@ -274,7 +179,7 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Login successful - token issued",
+                        "description": "OTP verified successfully",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -293,57 +198,34 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Login successful"
+                                            "example": "OTP verified"
                                         },
                                         "data": {
                                             "properties": {
                                                 "token": {
-                                                    "description": "Sanctum bearer token",
                                                     "type": "string",
-                                                    "example": "1|abcd1234efgh5678ijkl9012mnop3456"
+                                                    "example": "1|random-token-string"
+                                                },
+                                                "expires_at": {
+                                                    "type": "string",
+                                                    "format": "date-time"
                                                 },
                                                 "user": {
                                                     "properties": {
                                                         "id": {
-                                                            "type": "integer",
-                                                            "example": 1
+                                                            "type": "integer"
                                                         },
                                                         "name": {
-                                                            "type": "string",
-                                                            "example": "John Doe"
+                                                            "type": "string"
                                                         },
                                                         "email": {
-                                                            "type": "string",
-                                                            "example": "john@example.com"
+                                                            "type": "string"
                                                         },
                                                         "mobile": {
-                                                            "type": "string",
-                                                            "example": "9876543210"
+                                                            "type": "string"
                                                         },
-                                                        "is_active": {
-                                                            "type": "boolean",
-                                                            "example": true
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                },
-                                                "device": {
-                                                    "properties": {
-                                                        "id": {
-                                                            "type": "integer",
-                                                            "example": 1
-                                                        },
-                                                        "device_id": {
-                                                            "type": "string",
-                                                            "example": "550e8400-e29b-41d4-a716-446655440000"
-                                                        },
-                                                        "device_name": {
-                                                            "type": "string",
-                                                            "example": "iPhone 14 Pro"
-                                                        },
-                                                        "platform": {
-                                                            "type": "string",
-                                                            "example": "iOS"
+                                                        "role": {
+                                                            "type": "string"
                                                         }
                                                     },
                                                     "type": "object"
@@ -352,98 +234,29 @@
                                             "type": "object"
                                         },
                                         "timestamp": {
-                                            "description": "ISO 8601 UTC format",
                                             "type": "string",
-                                            "example": "2025-12-24T18:30:00Z"
+                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
                                 }
                             }
                         }
+                    },
+                    "400": {
+                        "description": "Invalid input"
                     },
                     "401": {
-                        "description": "Invalid or expired OTP",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 401
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "AUTH_OTP_INVALID"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Invalid OTP code. Please try again"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                        "description": "Invalid or expired OTP"
                     },
                     "403": {
-                        "description": "Account locked or device limit exceeded",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 403
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "AUTH_FORBIDDEN"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Account locked due to multiple failed attempts"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                        "description": "Account locked"
                     },
-                    "404": {
-                        "description": "Mobile not registered",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 404
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": false
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "AUTH_USER_NOT_FOUND"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                    "429": {
+                        "description": "Too many attempts"
                     },
-                    "422": {
-                        "description": "Validation failed"
+                    "500": {
+                        "description": "Internal server error"
                     }
                 }
             }
@@ -453,12 +266,12 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Get current user details",
-                "description": "Retrieve authenticated user profile information with human-readable timestamps in ISO 8601 format.",
-                "operationId": "getMe",
+                "summary": "Get authenticated user profile",
+                "description": "Retrieve current user details",
+                "operationId": "getProfile",
                 "responses": {
                     "200": {
-                        "description": "User details retrieved successfully",
+                        "description": "User profile retrieved",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -482,83 +295,32 @@
                                         "data": {
                                             "properties": {
                                                 "id": {
-                                                    "type": "integer",
-                                                    "example": 1
+                                                    "type": "integer"
                                                 },
                                                 "name": {
-                                                    "type": "string",
-                                                    "example": "John Doe"
+                                                    "type": "string"
                                                 },
                                                 "email": {
-                                                    "type": "string",
-                                                    "example": "john@example.com"
+                                                    "type": "string"
                                                 },
                                                 "mobile": {
-                                                    "type": "string",
-                                                    "example": "9876543210"
+                                                    "type": "string"
                                                 },
-                                                "is_active": {
-                                                    "type": "boolean",
-                                                    "example": true
+                                                "role": {
+                                                    "type": "string"
                                                 },
-                                                "created_at": {
-                                                    "description": "ISO 8601 UTC format",
-                                                    "type": "string",
-                                                    "example": "2025-12-24T18:30:00Z"
-                                                },
-                                                "last_login_at": {
-                                                    "description": "ISO 8601 UTC format",
-                                                    "type": "string",
-                                                    "example": "2025-12-24T18:30:00Z"
-                                                },
-                                                "role_assignments": {
+                                                "permissions": {
                                                     "type": "array",
                                                     "items": {
-                                                        "properties": {
-                                                            "id": {
-                                                                "type": "integer"
-                                                            },
-                                                            "role_id": {
-                                                                "type": "integer"
-                                                            },
-                                                            "is_current": {
-                                                                "type": "boolean"
-                                                            }
-                                                        },
-                                                        "type": "object"
-                                                    }
-                                                },
-                                                "devices": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "properties": {
-                                                            "id": {
-                                                                "type": "integer"
-                                                            },
-                                                            "device_id": {
-                                                                "type": "string"
-                                                            },
-                                                            "device_name": {
-                                                                "type": "string"
-                                                            },
-                                                            "platform": {
-                                                                "type": "string"
-                                                            },
-                                                            "last_activity_at": {
-                                                                "description": "ISO 8601 UTC format",
-                                                                "type": "string"
-                                                            }
-                                                        },
-                                                        "type": "object"
+                                                        "type": "string"
                                                     }
                                                 }
                                             },
                                             "type": "object"
                                         },
                                         "timestamp": {
-                                            "description": "ISO 8601 UTC format",
                                             "type": "string",
-                                            "example": "2025-12-24T18:30:00Z"
+                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -567,7 +329,7 @@
                         }
                     },
                     "401": {
-                        "description": "Unauthorized - No valid token"
+                        "description": "Unauthorized"
                     },
                     "500": {
                         "description": "Internal server error"
@@ -585,8 +347,8 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Logout and revoke token",
-                "description": "Invalidate current session token and logout user",
+                "summary": "Logout authenticated user",
+                "description": "Revoke current token",
                 "operationId": "logout",
                 "responses": {
                     "200": {
@@ -612,9 +374,8 @@
                                             "example": "Logged out successfully"
                                         },
                                         "timestamp": {
-                                            "description": "ISO 8601 UTC format",
                                             "type": "string",
-                                            "example": "2025-12-24T18:30:00Z"
+                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -623,7 +384,937 @@
                         }
                     },
                     "401": {
-                        "description": "Unauthorized - No valid token"
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/upload": {
+            "post": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Upload document",
+                "description": "Upload standalone or entity-bound document",
+                "operationId": "uploadDocument",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "file"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "example": "Contract Document"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Annual contract",
+                                        "nullable": true
+                                    },
+                                    "category_key": {
+                                        "type": "string",
+                                        "example": "contracts"
+                                    },
+                                    "expiry_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-12-31",
+                                        "nullable": true
+                                    },
+                                    "file": {
+                                        "description": "Document file",
+                                        "type": "file"
+                                    },
+                                    "entity_type": {
+                                        "type": "string",
+                                        "example": "Branch",
+                                        "nullable": true
+                                    },
+                                    "entity_id": {
+                                        "type": "integer",
+                                        "example": 1,
+                                        "nullable": true
+                                    },
+                                    "requires_approval": {
+                                        "type": "boolean",
+                                        "default": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Document uploaded",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 201
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S201"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Document uploaded"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/my": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Get my documents",
+                "description": "List own and accessible documents",
+                "operationId": "getMyDocuments",
+                "responses": {
+                    "200": {
+                        "description": "Documents retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Documents retrieved"
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/groups": {
+            "post": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Create document group",
+                "description": "Create temp group for documents",
+                "operationId": "createDocGroup",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Project Files"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Group created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 201
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S201"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Group created"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/groups/{groupId}/add": {
+            "post": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Add to group",
+                "description": "Add document to temp group",
+                "operationId": "addToDocGroup",
+                "parameters": [
+                    {
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "doc_id"
+                                ],
+                                "properties": {
+                                    "doc_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Added to group",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Added to group"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/groups/{groupId}/remove/{docId}": {
+            "delete": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Remove from group",
+                "description": "Remove document from temp group",
+                "operationId": "removeFromDocGroup",
+                "parameters": [
+                    {
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "docId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Removed from group",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Removed from group"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/groups/{groupId}/zip": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Download group ZIP",
+                "description": "Download temp group as ZIP",
+                "operationId": "downloadGroupZip",
+                "parameters": [
+                    {
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ZIP downloaded",
+                        "content": {
+                            "application/zip": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/search": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Search documents",
+                "description": "Full-text search on accessible documents",
+                "operationId": "searchDocuments",
+                "parameters": [
+                    {
+                        "name": "query",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "contract"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Search results",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Search results"
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/analytics": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Get analytics",
+                "description": "Document views/downloads stats",
+                "operationId": "getDocAnalytics",
+                "responses": {
+                    "200": {
+                        "description": "Analytics retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Analytics retrieved"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/docs/{docId}/approve": {
+            "post": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Approve document",
+                "description": "Approve pending document",
+                "operationId": "approveDocument",
+                "parameters": [
+                    {
+                        "name": "docId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Document approved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Document approved"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Document not found"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/history/{entityType}/{entityId}": {
+            "get": {
+                "tags": [
+                    "Entity History"
+                ],
+                "summary": "Get entity history",
+                "description": "Retrieve status and communication threads for an entity",
+                "operationId": "getEntityHistory",
+                "parameters": [
+                    {
+                        "name": "entityType",
+                        "in": "path",
+                        "description": "Entity type (e.g., Booking, Quote)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "entityId",
+                        "in": "path",
+                        "description": "Entity ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "History retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "History retrieved"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "History not found"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/history/{entityType}/{entityId}/thread": {
+            "post": {
+                "tags": [
+                    "Entity History"
+                ],
+                "summary": "Add comment to entity history",
+                "description": "Add a new thread or reply with optional attachments",
+                "operationId": "addEntityThread",
+                "parameters": [
+                    {
+                        "name": "entityType",
+                        "in": "path",
+                        "description": "Entity type (e.g., Booking, Quote)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "entityId",
+                        "in": "path",
+                        "description": "Entity ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "action_key"
+                                ],
+                                "properties": {
+                                    "action_key": {
+                                        "type": "string",
+                                        "example": "remarked"
+                                    },
+                                    "title": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "message": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "parent_id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                    },
+                                    "attachments": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Comment added",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 201
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S201"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Comment added"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "404": {
+                        "description": "Entity not found"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/chats": {
+            "post": {
+                "tags": [
+                    "Entity History"
+                ],
+                "summary": "Create group or one-to-one chat",
+                "description": "Create a chat with participants and history mechanism",
+                "operationId": "createChat",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "type",
+                                    "participants",
+                                    "title"
+                                ],
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "group",
+                                            "one_to_one"
+                                        ]
+                                    },
+                                    "participants": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "title": {
+                                        "type": "string"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Chat created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 201
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S201"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Chat created"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
                     },
                     "500": {
                         "description": "Internal server error"
@@ -641,8 +1332,8 @@
                 "tags": [
                     "Notifications"
                 ],
-                "summary": "Register device FCM token",
-                "description": "Register a new device with FCM token for push notifications",
+                "summary": "Register device for push notifications",
+                "description": "Register FCM token for device",
                 "operationId": "registerDevice",
                 "requestBody": {
                     "required": true,
@@ -657,41 +1348,32 @@
                                 ],
                                 "properties": {
                                     "device_id": {
-                                        "description": "UUID format",
-                                        "type": "string",
-                                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                                        "description": "Unique device identifier",
+                                        "type": "string"
                                     },
                                     "device_name": {
-                                        "description": "Human-readable device name",
-                                        "type": "string",
-                                        "example": "iPhone 14 Pro"
+                                        "description": "Device model/name",
+                                        "type": "string"
                                     },
                                     "platform": {
                                         "type": "string",
                                         "enum": [
-                                            "iOS",
-                                            "Android",
-                                            "Web"
-                                        ],
-                                        "example": "iOS"
+                                            "android",
+                                            "ios",
+                                            "web"
+                                        ]
                                     },
                                     "platform_version": {
-                                        "type": "string",
-                                        "example": "16.2",
-                                        "nullable": true
+                                        "description": "OS version",
+                                        "type": "string"
                                     },
                                     "fcm_token": {
-                                        "description": "Firebase Cloud Messaging token",
-                                        "type": "string",
-                                        "example": "eJzlPc9u4sYWf4VV91JV7YTwY8gUd5AosZLSXvRNvViZ+JdxzHjyLJNhZBgMhhPSRRZZdJEHUhYiUcosUIZMRE"
+                                        "description": "FCM registration token",
+                                        "type": "string"
                                     },
                                     "metadata": {
-                                        "type": "object",
-                                        "example": {
-                                            "os_version": "16.2",
-                                            "app_version": "1.0.0"
-                                        },
-                                        "nullable": true
+                                        "description": "Additional device info",
+                                        "type": "object"
                                     }
                                 },
                                 "type": "object"
@@ -701,7 +1383,7 @@
                 },
                 "responses": {
                     "201": {
-                        "description": "Device registered successfully",
+                        "description": "Device registered",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -725,40 +1407,13 @@
                                         "data": {
                                             "properties": {
                                                 "id": {
-                                                    "type": "integer",
-                                                    "example": 1
+                                                    "type": "integer"
                                                 },
                                                 "device_id": {
-                                                    "type": "string",
-                                                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                                                },
-                                                "device_name": {
-                                                    "type": "string",
-                                                    "example": "iPhone 14 Pro"
-                                                },
-                                                "platform": {
-                                                    "type": "string",
-                                                    "example": "iOS"
-                                                },
-                                                "fcm_token": {
                                                     "type": "string"
-                                                },
-                                                "is_active": {
-                                                    "type": "boolean",
-                                                    "example": true
-                                                },
-                                                "last_used_at": {
-                                                    "type": "string",
-                                                    "format": "date-time",
-                                                    "example": "2025-12-24T18:30:00Z"
                                                 }
                                             },
                                             "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time",
-                                            "example": "2025-12-24T18:30:00Z"
                                         }
                                     },
                                     "type": "object"
@@ -766,8 +1421,170 @@
                             }
                         }
                     },
-                    "422": {
-                        "description": "Validation failed"
+                    "400": {
+                        "description": "Invalid input"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/devices/{deviceId}": {
+            "put": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Update device FCM token",
+                "description": "Refresh FCM token for registered device",
+                "operationId": "updateDeviceToken",
+                "parameters": [
+                    {
+                        "name": "deviceId",
+                        "in": "path",
+                        "description": "Device ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "fcm_token"
+                                ],
+                                "properties": {
+                                    "fcm_token": {
+                                        "description": "New FCM token",
+                                        "type": "string"
+                                    },
+                                    "metadata": {
+                                        "description": "Updated metadata",
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Device updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Device updated successfully"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer"
+                                                },
+                                                "device_id": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Device not found"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Unregister device",
+                "description": "Remove device from notifications",
+                "operationId": "unregisterDevice",
+                "parameters": [
+                    {
+                        "name": "deviceId",
+                        "in": "path",
+                        "description": "Device ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Device unregistered",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Device unregistered successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Device not found"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -788,34 +1605,12 @@
                 "tags": [
                     "Notifications"
                 ],
-                "summary": "Get all registered devices",
-                "description": "Retrieve paginated list of all user devices with FCM tokens",
-                "operationId": "getDevices",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "Page number for pagination",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "default": 1
-                        }
-                    },
-                    {
-                        "name": "per_page",
-                        "in": "query",
-                        "description": "Items per page",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "default": 10
-                        }
-                    }
-                ],
+                "summary": "Get user devices",
+                "description": "List registered devices",
+                "operationId": "getUserDevices",
                 "responses": {
                     "200": {
-                        "description": "Devices retrieved successfully",
+                        "description": "Devices retrieved",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -834,7 +1629,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Devices retrieved successfully"
+                                            "example": "Devices retrieved"
                                         },
                                         "data": {
                                             "type": "array",
@@ -862,36 +1657,6 @@
                                                 },
                                                 "type": "object"
                                             }
-                                        },
-                                        "meta": {
-                                            "properties": {
-                                                "pagination": {
-                                                    "properties": {
-                                                        "current_page": {
-                                                            "type": "integer",
-                                                            "example": 1
-                                                        },
-                                                        "per_page": {
-                                                            "type": "integer",
-                                                            "example": 10
-                                                        },
-                                                        "total": {
-                                                            "type": "integer",
-                                                            "example": 5
-                                                        },
-                                                        "last_page": {
-                                                            "type": "integer",
-                                                            "example": 1
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -913,28 +1678,17 @@
                 ]
             }
         },
-        "/devices/{id}": {
-            "delete": {
+        "/notifications/unread-count": {
+            "get": {
                 "tags": [
                     "Notifications"
                 ],
-                "summary": "Revoke single device",
-                "description": "Revoke a specific device FCM token. Device will no longer receive notifications",
-                "operationId": "revokeDevice",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Device ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
+                "summary": "Get unread notifications count",
+                "description": "Retrieve count of unread items",
+                "operationId": "getUnreadCount",
                 "responses": {
                     "200": {
-                        "description": "Device revoked successfully",
+                        "description": "Unread count retrieved",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -953,81 +1707,28 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Device revoked successfully"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden - Device belongs to another user"
-                    },
-                    "404": {
-                        "description": "Device not found"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/devices/revoke-all": {
-            "post": {
-                "tags": [
-                    "Notifications"
-                ],
-                "summary": "Logout from all devices",
-                "description": "Revoke all user devices FCM tokens at once. User will be logged out everywhere",
-                "operationId": "revokeAllDevices",
-                "responses": {
-                    "200": {
-                        "description": "All devices revoked successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 200
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "S200"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "All devices revoked successfully"
+                                            "example": "Unread count retrieved"
                                         },
                                         "data": {
                                             "properties": {
-                                                "revoked_count": {
+                                                "notifications": {
                                                     "type": "integer",
                                                     "example": 5
+                                                },
+                                                "alerts": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "messages": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 10
                                                 }
                                             },
                                             "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -1054,34 +1755,63 @@
                 "tags": [
                     "Notifications"
                 ],
-                "summary": "Get all notifications",
-                "description": "Retrieve paginated list of user notifications with optional filtering",
+                "summary": "Get user notifications",
+                "description": "Retrieve paginated notifications",
                 "operationId": "getNotifications",
                 "parameters": [
                     {
                         "name": "page",
                         "in": "query",
                         "description": "Page number",
-                        "required": false,
                         "schema": {
                             "type": "integer",
                             "default": 1
                         }
                     },
                     {
-                        "name": "is_read",
+                        "name": "per_page",
                         "in": "query",
-                        "description": "Filter by read status (true/false)",
-                        "required": false,
+                        "description": "Items per page",
                         "schema": {
-                            "type": "boolean"
+                            "type": "integer",
+                            "default": 20,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "sort_by",
+                        "in": "query",
+                        "description": "Sort field",
+                        "schema": {
+                            "type": "string",
+                            "default": "created_at"
+                        }
+                    },
+                    {
+                        "name": "sort_order",
+                        "in": "query",
+                        "description": "Sort order",
+                        "schema": {
+                            "type": "string",
+                            "default": "desc",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
                         }
                     },
                     {
                         "name": "type",
                         "in": "query",
-                        "description": "Filter by notification type",
-                        "required": false,
+                        "description": "Filter by type",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "description": "Filter by category",
                         "schema": {
                             "type": "string"
                         }
@@ -1089,21 +1819,35 @@
                     {
                         "name": "priority",
                         "in": "query",
-                        "description": "Filter by priority (low, medium, high)",
-                        "required": false,
+                        "description": "Filter by priority",
                         "schema": {
                             "type": "string",
                             "enum": [
                                 "low",
-                                "medium",
-                                "high"
+                                "normal",
+                                "high",
+                                "critical"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "read_status",
+                        "in": "query",
+                        "description": "Filter by read status",
+                        "schema": {
+                            "type": "string",
+                            "default": "all",
+                            "enum": [
+                                "all",
+                                "read",
+                                "unread"
                             ]
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Notifications retrieved successfully",
+                        "description": "Notifications retrieved",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1122,25 +1866,35 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Notifications retrieved successfully"
+                                            "example": "Notifications retrieved"
                                         },
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/components/schemas/NotificationResource"
-                                            }
-                                        },
-                                        "meta": {
                                             "properties": {
+                                                "notifications": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/NotificationResource"
+                                                    }
+                                                },
                                                 "pagination": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "total": {
+                                                            "type": "integer"
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
                                                     "type": "object"
                                                 }
                                             },
                                             "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -1263,227 +2017,12 @@
                                                 }
                                             },
                                             "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
                                 }
                             }
                         }
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/notifications/{id}/read": {
-            "post": {
-                "tags": [
-                    "Notifications"
-                ],
-                "summary": "Mark notification as read",
-                "description": "Mark a specific notification as read",
-                "operationId": "markNotificationAsRead",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Notification ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Notification marked as read",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 200
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "S200"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Notification marked as read"
-                                        },
-                                        "data": {
-                                            "$ref": "#/components/schemas/NotificationResource"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden"
-                    },
-                    "404": {
-                        "description": "Notification not found"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/notifications/mark-all-read": {
-            "post": {
-                "tags": [
-                    "Notifications"
-                ],
-                "summary": "Mark all notifications as read",
-                "description": "Mark all unread notifications as read in one operation",
-                "operationId": "markAllNotificationsAsRead",
-                "responses": {
-                    "200": {
-                        "description": "All notifications marked as read",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 200
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "S200"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "All notifications marked as read"
-                                        },
-                                        "data": {
-                                            "properties": {
-                                                "marked_count": {
-                                                    "type": "integer",
-                                                    "example": 5
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/notifications/{id}": {
-            "delete": {
-                "tags": [
-                    "Notifications"
-                ],
-                "summary": "Delete notification",
-                "description": "Permanently delete a specific notification",
-                "operationId": "deleteNotification",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Notification ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Notification deleted successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 200
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "S200"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Notification deleted successfully"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden"
-                    },
-                    "404": {
-                        "description": "Notification not found"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -1504,38 +2043,82 @@
                 "tags": [
                     "Notifications"
                 ],
-                "summary": "Get all alerts",
-                "description": "Retrieve paginated list of user alerts with optional filtering",
+                "summary": "Get user alerts",
+                "description": "Retrieve paginated alerts",
                 "operationId": "getAlerts",
                 "parameters": [
                     {
-                        "name": "severity",
+                        "name": "page",
                         "in": "query",
-                        "description": "Filter by severity",
-                        "required": false,
+                        "description": "Page number",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items per page",
+                        "schema": {
+                            "type": "integer",
+                            "default": 20,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "sort_by",
+                        "in": "query",
+                        "description": "Sort field",
                         "schema": {
                             "type": "string",
+                            "default": "created_at"
+                        }
+                    },
+                    {
+                        "name": "sort_order",
+                        "in": "query",
+                        "description": "Sort order",
+                        "schema": {
+                            "type": "string",
+                            "default": "desc",
                             "enum": [
-                                "critical",
-                                "high",
-                                "medium",
-                                "low"
+                                "asc",
+                                "desc"
                             ]
                         }
                     },
                     {
-                        "name": "is_read",
+                        "name": "severity",
+                        "in": "query",
+                        "description": "Filter by severity",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "info",
+                                "warning",
+                                "critical"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "read_status",
                         "in": "query",
                         "description": "Filter by read status",
-                        "required": false,
                         "schema": {
-                            "type": "boolean"
+                            "type": "string",
+                            "default": "all",
+                            "enum": [
+                                "all",
+                                "read",
+                                "unread"
+                            ]
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Alerts retrieved successfully",
+                        "description": "Alerts retrieved",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1554,20 +2137,35 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Alerts retrieved successfully"
+                                            "example": "Alerts retrieved"
                                         },
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/components/schemas/AlertResource"
-                                            }
-                                        },
-                                        "meta": {
+                                            "properties": {
+                                                "alerts": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/AlertResource"
+                                                    }
+                                                },
+                                                "pagination": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "total": {
+                                                            "type": "integer"
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
                                             "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -1589,94 +2187,176 @@
                 ]
             }
         },
-        "/alerts/{id}/read": {
-            "post": {
-                "tags": [
-                    "Notifications"
-                ],
-                "summary": "Mark alert as read",
-                "description": "Mark a specific alert as read",
-                "operationId": "markAlertAsRead",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Alert ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Alert marked as read",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "http_status": {
-                                            "type": "integer",
-                                            "example": 200
-                                        },
-                                        "success": {
-                                            "type": "boolean",
-                                            "example": true
-                                        },
-                                        "code": {
-                                            "type": "string",
-                                            "example": "S200"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Alert marked as read"
-                                        },
-                                        "data": {
-                                            "$ref": "#/components/schemas/AlertResource"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden"
-                    },
-                    "404": {
-                        "description": "Alert not found"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/messages/user/{user_id}": {
+        "/messages": {
             "get": {
                 "tags": [
                     "Notifications"
                 ],
-                "summary": "Get conversation with user",
-                "description": "Retrieve paginated message history with another user",
-                "operationId": "getConversation",
+                "summary": "Get user messages",
+                "description": "Retrieve paginated messages",
+                "operationId": "getMessages",
                 "parameters": [
                     {
-                        "name": "user_id",
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items per page",
+                        "schema": {
+                            "type": "integer",
+                            "default": 20,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "sort_by",
+                        "in": "query",
+                        "description": "Sort field",
+                        "schema": {
+                            "type": "string",
+                            "default": "created_at"
+                        }
+                    },
+                    {
+                        "name": "sort_order",
+                        "in": "query",
+                        "description": "Sort order",
+                        "schema": {
+                            "type": "string",
+                            "default": "desc",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Filter by type",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "text",
+                                "image",
+                                "document"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "sender_id",
+                        "in": "query",
+                        "description": "Filter by sender ID",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "read_status",
+                        "in": "query",
+                        "description": "Filter by read status",
+                        "schema": {
+                            "type": "string",
+                            "default": "all",
+                            "enum": [
+                                "all",
+                                "read",
+                                "unread"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Messages retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Messages retrieved"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "messages": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/MessageResource"
+                                                    }
+                                                },
+                                                "pagination": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "total": {
+                                                            "type": "integer"
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/messages/conversation/{userId}": {
+            "get": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get conversation messages",
+                "description": "Retrieve messages with specific user",
+                "operationId": "getConversationMessages",
+                "parameters": [
+                    {
+                        "name": "userId",
                         "in": "path",
-                        "description": "User ID to get conversation with",
+                        "description": "Other user ID",
                         "required": true,
                         "schema": {
                             "type": "integer"
@@ -1686,16 +2366,25 @@
                         "name": "page",
                         "in": "query",
                         "description": "Page number",
-                        "required": false,
                         "schema": {
                             "type": "integer",
                             "default": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Items per page",
+                        "schema": {
+                            "type": "integer",
+                            "default": 20,
+                            "maximum": 100
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Conversation retrieved successfully",
+                        "description": "Conversation retrieved",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1714,37 +2403,41 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "Conversation retrieved successfully"
+                                            "example": "Conversation retrieved"
                                         },
                                         "data": {
                                             "properties": {
-                                                "user": {
-                                                    "type": "object"
-                                                },
                                                 "messages": {
                                                     "type": "array",
                                                     "items": {
                                                         "$ref": "#/components/schemas/MessageResource"
                                                     }
+                                                },
+                                                "pagination": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "total": {
+                                                            "type": "integer"
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "type": "object"
                                                 }
                                             },
                                             "type": "object"
-                                        },
-                                        "meta": {
-                                            "type": "object"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
                                 }
                             }
                         }
-                    },
-                    "404": {
-                        "description": "User not found"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -1758,19 +2451,21 @@
                         "sanctum": []
                     }
                 ]
-            },
+            }
+        },
+        "/messages/send/{receiverId}": {
             "post": {
                 "tags": [
                     "Notifications"
                 ],
                 "summary": "Send message to user",
-                "description": "Send a new message to another user",
+                "description": "Send text or attachment message",
                 "operationId": "sendMessage",
                 "parameters": [
                     {
-                        "name": "user_id",
+                        "name": "receiverId",
                         "in": "path",
-                        "description": "Recipient user ID",
+                        "description": "Receiver user ID",
                         "required": true,
                         "schema": {
                             "type": "integer"
@@ -1816,7 +2511,7 @@
                 },
                 "responses": {
                     "201": {
-                        "description": "Message sent successfully",
+                        "description": "Message sent",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1839,10 +2534,6 @@
                                         },
                                         "data": {
                                             "$ref": "#/components/schemas/MessageResource"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -1851,13 +2542,280 @@
                         }
                     },
                     "400": {
-                        "description": "Cannot send message to yourself"
+                        "description": "Invalid input"
                     },
                     "404": {
                         "description": "User not found"
                     },
-                    "422": {
-                        "description": "Validation failed"
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notifications/{id}/read": {
+            "put": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Mark notification as read",
+                "description": "Update notification read status",
+                "operationId": "markNotificationAsRead",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Notification ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notification marked as read",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notification marked as read"
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/NotificationResource"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Notification not found"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notifications/mark-all-read": {
+            "put": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Mark all notifications as read",
+                "description": "Update all unread notifications to read",
+                "operationId": "markAllNotificationsAsRead",
+                "responses": {
+                    "200": {
+                        "description": "All notifications marked as read",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "All notifications marked as read"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "count": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/notifications/{id}": {
+            "delete": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Delete notification",
+                "description": "Remove notification",
+                "operationId": "deleteNotification",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Notification ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Notification deleted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Notification deleted successfully"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Notification not found"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/alerts/{id}/read": {
+            "put": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Mark alert as read",
+                "description": "Update alert read status",
+                "operationId": "markAlertAsRead",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Alert ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Alert marked as read",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Alert marked as read"
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/AlertResource"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Alert not found"
+                    },
+                    "403": {
+                        "description": "Forbidden"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -1874,12 +2832,12 @@
             }
         },
         "/messages/{id}/read": {
-            "post": {
+            "put": {
                 "tags": [
                     "Notifications"
                 ],
                 "summary": "Mark message as read",
-                "description": "Mark a received message as read",
+                "description": "Update message read status",
                 "operationId": "markMessageAsRead",
                 "parameters": [
                     {
@@ -1917,10 +2875,6 @@
                                         },
                                         "data": {
                                             "$ref": "#/components/schemas/MessageResource"
-                                        },
-                                        "timestamp": {
-                                            "type": "string",
-                                            "format": "date-time"
                                         }
                                     },
                                     "type": "object"
@@ -1928,11 +2882,11 @@
                             }
                         }
                     },
-                    "403": {
-                        "description": "Forbidden - Only receiver can mark as read"
-                    },
                     "404": {
                         "description": "Message not found"
+                    },
+                    "403": {
+                        "description": "Forbidden"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -1948,20 +2902,65 @@
                 ]
             }
         },
-        "/api/v1/system-settings": {
+        "/system-settings": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
-                "summary": "List all system settings grouped by topic",
-                "description": "Returns all active system settings organized by topic/category",
-                "operationId": "indexSettings",
+                "summary": "Get all system settings",
+                "description": "Retrieve all settings grouped by topic",
+                "operationId": "getAllSystemSettings",
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved all settings"
+                        "description": "Settings retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Settings retrieved successfully"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "site": {
+                                                    "properties": {
+                                                        "name": {
+                                                            "type": "string"
+                                                        },
+                                                        "logo": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "timestamp": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "description": "Unauthorized"
                     },
                     "500": {
                         "description": "Internal server error"
@@ -1974,19 +2973,19 @@
                 ]
             }
         },
-        "/api/v1/system-settings/topic/{topic}": {
+        "/system-settings/topic/{topic}": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
-                "summary": "Get settings for a specific topic",
-                "description": "Returns all settings for the specified topic",
-                "operationId": "showTopic",
+                "summary": "Get settings by topic",
+                "description": "Retrieve settings for specific topic",
+                "operationId": "getSettingsByTopic",
                 "parameters": [
                     {
                         "name": "topic",
                         "in": "path",
-                        "description": "Topic/category name",
+                        "description": "Settings topic (e.g., site, dealership)",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -1995,13 +2994,44 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved topic settings"
+                        "description": "Settings retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Settings for topic retrieved"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
                     },
                     "404": {
                         "description": "Topic not found"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
                     }
                 },
                 "security": [
@@ -2011,19 +3041,19 @@
                 ]
             }
         },
-        "/api/v1/system-settings/key/{key}": {
+        "/system-settings/{key}": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
-                "summary": "Get a single setting by key",
-                "description": "Returns the value of a specific setting",
-                "operationId": "showKey",
+                "summary": "Get single setting",
+                "description": "Retrieve setting by key",
+                "operationId": "getSetting",
                 "parameters": [
                     {
                         "name": "key",
                         "in": "path",
-                        "description": "Setting key to retrieve",
+                        "description": "Setting key (e.g., site.name)",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -2032,13 +3062,55 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved setting"
+                        "description": "Setting retrieved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Setting retrieved successfully"
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer"
+                                                },
+                                                "key": {
+                                                    "type": "string"
+                                                },
+                                                "value": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
                     },
                     "404": {
                         "description": "Setting not found"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
                     }
                 },
                 "security": [
@@ -2051,14 +3123,14 @@
                 "tags": [
                     "System Settings"
                 ],
-                "summary": "Update a setting value (admin only)",
-                "description": "Updates the value of a specific setting",
+                "summary": "Update setting",
+                "description": "Update setting value",
                 "operationId": "updateSetting",
                 "parameters": [
                     {
                         "name": "key",
                         "in": "path",
-                        "description": "Setting key to update",
+                        "description": "Setting key",
                         "required": true,
                         "schema": {
                             "type": "string"
@@ -2076,7 +3148,7 @@
                                 "properties": {
                                     "value": {
                                         "type": "string",
-                                        "example": "New Value"
+                                        "example": "new value"
                                     }
                                 },
                                 "type": "object"
@@ -2086,16 +3158,47 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Setting updated successfully"
+                        "description": "Setting updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "http_status": {
+                                            "type": "integer",
+                                            "example": 200
+                                        },
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "example": "S200"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Setting updated successfully"
+                                        },
+                                        "data": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input"
                     },
                     "403": {
-                        "description": "Forbidden - Admin access required"
+                        "description": "Forbidden"
                     },
                     "404": {
                         "description": "Setting not found"
                     },
-                    "422": {
-                        "description": "Validation error"
+                    "500": {
+                        "description": "Internal server error"
                     }
                 },
                 "security": [
@@ -2105,23 +3208,30 @@
                 ]
             }
         },
-        "/api/v1/system-settings/category/site": {
+        "/system-settings/export": {
             "get": {
                 "tags": [
                     "System Settings"
                 ],
-                "summary": "Get site configuration settings",
-                "description": "Get site-specific settings\n\nConvenience endpoint for site configuration settings.",
-                "operationId": "getSiteSettings",
+                "summary": "Export all settings",
+                "description": "Export settings as JSON",
+                "operationId": "exportSettings",
                 "responses": {
                     "200": {
-                        "description": "Successfully retrieved site settings"
-                    },
-                    "404": {
-                        "description": "Settings not found"
+                        "description": "Settings exported",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal server error"
                     }
                 },
                 "security": [
@@ -2131,136 +3241,51 @@
                 ]
             }
         },
-        "/api/v1/system-settings/category/dealership": {
-            "get": {
-                "tags": [
-                    "System Settings"
-                ],
-                "summary": "Get dealership information settings",
-                "description": "Get dealership-specific settings\n\nConvenience endpoint for dealership information settings.",
-                "operationId": "getDealershipSettings",
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved dealership settings"
-                    },
-                    "404": {
-                        "description": "Settings not found"
-                    },
-                    "401": {
-                        "description": "Unauthenticated"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/v1/system-settings/category/pricing": {
-            "get": {
-                "tags": [
-                    "System Settings"
-                ],
-                "summary": "Get pricing configuration settings",
-                "description": "Get pricing-specific settings\n\nConvenience endpoint for pricing configuration settings.",
-                "operationId": "getPricingSettings",
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved pricing settings"
-                    },
-                    "404": {
-                        "description": "Settings not found"
-                    },
-                    "401": {
-                        "description": "Unauthenticated"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/v1/system-settings/export/json": {
-            "get": {
-                "tags": [
-                    "System Settings"
-                ],
-                "summary": "Export all settings as JSON",
-                "description": "Export all settings as JSON\n\nExports all system settings for backup or migration (admin only).",
-                "operationId": "exportJson",
-                "responses": {
-                    "200": {
-                        "description": "Settings exported successfully"
-                    },
-                    "403": {
-                        "description": "Forbidden - Admin access required"
-                    },
-                    "401": {
-                        "description": "Unauthenticated"
-                    }
-                },
-                "security": [
-                    {
-                        "sanctum": []
-                    }
-                ]
-            }
-        },
-        "/api/v1/system-settings/import/json": {
+        "/system-settings/import": {
             "post": {
                 "tags": [
                     "System Settings"
                 ],
-                "summary": "Import settings from JSON",
-                "description": "Import settings from JSON\n\nImports system settings from JSON array (admin only).",
-                "operationId": "importJson",
+                "summary": "Import settings",
+                "description": "Import settings from JSON",
+                "operationId": "importSettings",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
-                                "required": [
-                                    "settings"
-                                ],
-                                "properties": {
-                                    "settings": {
-                                        "type": "array",
-                                        "items": {
-                                            "properties": {
-                                                "key": {
-                                                    "type": "string"
-                                                },
-                                                "value": {
-                                                    "type": "string"
-                                                },
-                                                "topic": {
-                                                    "type": "string"
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    }
-                                },
-                                "type": "object"
+                                "type": "array",
+                                "items": {
+                                    "type": "object"
+                                }
                             }
                         }
                     }
                 },
                 "responses": {
                     "200": {
-                        "description": "Import completed"
+                        "description": "Import completed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "imported": {
+                                            "type": "integer"
+                                        },
+                                        "failed": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
                     },
                     "403": {
-                        "description": "Forbidden - Admin access required"
+                        "description": "Forbidden"
                     },
-                    "422": {
-                        "description": "Validation error"
-                    },
-                    "401": {
-                        "description": "Unauthenticated"
+                    "500": {
+                        "description": "Internal server error"
                     }
                 },
                 "security": [
@@ -2516,6 +3541,14 @@
         }
     },
     "tags": [
+        {
+            "name": "Documents",
+            "description": "Endpoints for managing documents"
+        },
+        {
+            "name": "Entity History",
+            "description": "Endpoints for managing entity history, status, and communications"
+        },
         {
             "name": "Notifications",
             "description": "Notification and messaging endpoints for managing notifications, alerts, devices, and messages"
