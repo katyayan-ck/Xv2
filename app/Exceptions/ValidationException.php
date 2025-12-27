@@ -2,35 +2,24 @@
 
 namespace App\Exceptions;
 
-use Exception;
-use Illuminate\Http\JsonResponse;
+use App\Enums\ErrorCodeEnum;
 
-class ValidationException extends Exception
+class ValidationException extends ApplicationException
 {
-    protected $code = 'E_VALIDATION';
-    protected $httpStatus = 422;
-    protected $errors = [];
+    protected array $errors = [];
 
     public function __construct(
-        string $message = '',
+        string $message = 'Validation failed',
         array $errors = [],
-        string $code = 'E_VALIDATION',
-        int $httpStatus = 422
+        ?ErrorCodeEnum $errorCode = null
     ) {
-        $this->code = $code;
-        $this->httpStatus = $httpStatus;
         $this->errors = $errors;
-        parent::__construct($message);
+        $errorCode = $errorCode ?? ErrorCodeEnum::VALIDATION_FAILED;
+        parent::__construct($message, $errorCode, 422);
     }
 
-    public function render(): JsonResponse
+    public function getErrors(): array
     {
-        return response()->json([
-            'http_status' => $this->httpStatus,
-            'success' => false,
-            'code' => $this->code,
-            'message' => $this->message,
-            'errors' => $this->errors,
-        ], $this->httpStatus);
+        return $this->errors;
     }
 }

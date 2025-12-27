@@ -2,402 +2,391 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Http\Controllers\Controller;
+use App\Enums\ErrorCodeEnum;
+use App\Exceptions\AuthorizationException;
+use App\Exceptions\ResourceNotFoundException;
+use App\Exceptions\ValidationException;
+use App\Http\Controllers\BaseController;
 use App\Models\Core\SystemSetting;
 use App\Services\SystemSettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
- * @OA\Tag(
- *     name="System Settings",
- *     description="API endpoints for retrieving application system settings"
- * )
+ * SystemSettingApiController
+ * 
+ * Provides REST API endpoints for managing system settings and configuration.
+ * Allows retrieval and management of application-wide settings organized by topics.
+ * 
+ * Features:
+ * - List all system settings organized by topic/category
+ * - Retrieve settings by topic (e.g., site, dealership, pricing)
+ * - Get individual setting by key
+ * - Update settings (admin only)
+ * - Export settings as JSON
+ * - Import settings from JSON
+ * - Comprehensive error handling with standard error codes
+ * 
+ * @category API Controllers
+ * @package App\Http\Controllers\Api\V1
+ * @author VDMS Development Team
+ * @version 2.0
  */
-class SystemSettingApiController extends Controller
+class SystemSettingApiController extends BaseController
 {
-    public function __construct(private SystemSettingService $settingService) {}
+    protected SystemSettingService $settingService;
 
-    /**
-     * Get all system settings grouped by topic
-     *
-     * @OA\Get(
-     *     path="/api/system-settings",
-     *     summary="List all system settings grouped by topic",
-     *     description="Returns all active system settings organized by topic/category",
-     *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Successfully retrieved settings",
-     *         @OA\JsonContent(
-     *             type="object",
-     *             example={
-     *                 "site": {
-     *                     "Basic Settings": {
-     *                         "site.name": "My Dealership CRM",
-     *                         "site.slogan": "Drive Your Success",
-     *                         "site.url": "https://crm.example.com"
-     *                     },
-     *                     "Logo Settings": {
-     *                         "site.logo.header": "/images/logo-header.png",
-     *                         "site.logo.footer": "/images/logo-footer.png",
-     *                         "site.logo.login": "/images/logo-login.png"
-     *                     }
-     *                 },
-     *                 "dealership": {
-     *                     "Contact": {
-     *                         "dealership.name": "ABC Motors",
-     *                         "dealership.phone": "+91-8800000000",
-     *                         "dealership.email": "info@abcmotors.com"
-     *                     }
-     *                 },
-     *                 "pricing": {
-     *                     "Tax Rates": {
-     *                         "pricing.gst_rate": 18,
-     *                         "pricing.tds_rate": 1
-     *                     }
-     *                 }
-     *             }
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthenticated"
-     *     )
-     * )
-     */
-    public function index(): JsonResponse
+    public function __construct(SystemSettingService $settingService)
     {
-        return response()->json($this->settingService->allByTopic());
+        $this->settingService = $settingService;
+        $this->middleware('auth:sanctum');
     }
 
     /**
-     * Get settings for specific topic
+     * Get all system settings
+     *
+     * Retrieves all active system settings organized by topic/category.
      *
      * @OA\Get(
-     *     path="/api/system-settings/topic/{topic}",
-     *     summary="Get settings for a specific topic",
-     *     description="Returns all settings for a given topic/category",
+     *     path="/system-settings",
+     *     operationId="getAllSystemSettings",
      *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
+     *     summary="Get all system settings",
+     *     description="Retrieve all settings grouped by topic",
+     *     security={{"sanctum":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Settings retrieved",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="http_status", type="integer", example=200),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="Settings retrieved successfully"),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="site", type="object",
+     *                     @OA\Property(property="name", type="string"),
+     *                     @OA\Property(property="logo", type="string")
+     *                 )
+     *             ),
+     *             @OA\Property(property="timestamp", type="string", format="date-time")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Internal server error")
+     * )
+     *
+     * @return JsonResponse
+     */
+    public function index(): JsonResponse
+    {
+        try {
+            $settings = $this->settingService->allByTopic();
+            return $this->successResponse($settings, 'Settings retrieved successfully', 200);
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Get All Settings', ['user_id' => Auth::id()]);
+        }
+    }
+
+    /**
+     * Get settings by topic
+     *
+     * Retrieves settings for a specific topic/category.
+     *
+     * @OA\Get(
+     *     path="/system-settings/topic/{topic}",
+     *     operationId="getSettingsByTopic",
+     *     tags={"System Settings"},
+     *     summary="Get settings by topic",
+     *     description="Retrieve settings for specific topic",
+     *     security={{"sanctum":{}}},
      *     @OA\Parameter(
      *         name="topic",
      *         in="path",
      *         required=true,
-     *         description="Topic code (e.g., 'site', 'dealership', 'pricing')",
+     *         description="Settings topic (e.g., site, dealership)",
      *         @OA\Schema(type="string")
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Successfully retrieved topic settings",
+     *         description="Settings retrieved",
      *         @OA\JsonContent(
-     *             type="object",
-     *             example={
-     *                 "Basic Settings": {
-     *                     "site.name": "My Dealership CRM",
-     *                     "site.slogan": "Drive Your Success"
-     *                 },
-     *                 "Logo Settings": {
-     *                     "site.logo.header": "/images/logo-header.png"
-     *                 }
-     *             }
+     *             @OA\Property(property="http_status", type="integer", example=200),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="Settings for topic retrieved"),
+     *             @OA\Property(property="data", type="object")
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=404,
-     *         description="Topic not found"
-     *     )
+     *     @OA\Response(response=404, description="Topic not found"),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param string $topic
+     * @return JsonResponse
      */
-    public function topic(string $topic): JsonResponse
+    public function getByTopic(string $topic): JsonResponse
     {
-        $settings = $this->settingService->topic($topic);
-
-        if (empty($settings)) {
-            return response()->json(['message' => "Topic '{$topic}' not found"], 404);
+        try {
+            $settings = $this->settingService->topic($topic);
+            if (empty($settings)) {
+                return $this->notFoundResponse('Topic', $topic);
+            }
+            return $this->successResponse($settings, "Settings for topic '{$topic}' retrieved", 200);
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Get Settings By Topic', ['topic' => $topic, 'user_id' => Auth::id()]);
         }
-
-        return response()->json($settings);
     }
 
     /**
-     * Get a single setting by key
+     * Get single setting
+     *
+     * Retrieves a single setting by key.
      *
      * @OA\Get(
-     *     path="/api/system-settings/{key}",
-     *     summary="Get a single setting by key",
-     *     description="Returns the value of a specific setting key",
+     *     path="/system-settings/{key}",
+     *     operationId="getSetting",
      *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
+     *     summary="Get single setting",
+     *     description="Retrieve setting by key",
+     *     security={{"sanctum":{}}},
      *     @OA\Parameter(
      *         name="key",
      *         in="path",
      *         required=true,
-     *         description="Setting key (e.g., 'site.name')",
+     *         description="Setting key (e.g., site.name)",
      *         @OA\Schema(type="string")
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Successfully retrieved setting",
+     *         description="Setting retrieved",
      *         @OA\JsonContent(
-     *             type="object",
-     *             example={
-     *                 "key": "site.name",
-     *                 "value": "My Dealership CRM"
-     *             }
+     *             @OA\Property(property="http_status", type="integer", example=200),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="Setting retrieved successfully"),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="id", type="integer"),
+     *                 @OA\Property(property="key", type="string"),
+     *                 @OA\Property(property="value", type="string")
+     *             )
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=404,
-     *         description="Setting not found"
-     *     )
+     *     @OA\Response(response=404, description="Setting not found"),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param string $key
+     * @return JsonResponse
      */
     public function show(string $key): JsonResponse
     {
-        $value = $this->settingService->get($key);
-
-        if ($value === null) {
-            return response()->json(['message' => "Setting '{$key}' not found"], 404);
+        try {
+            $setting = $this->settingService->getSetting($key);
+            if (!$setting) {
+                return $this->notFoundResponse('Setting', $key);
+            }
+            return $this->successResponse($setting, 'Setting retrieved successfully', 200);
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Get Setting', ['key' => $key, 'user_id' => Auth::id()]);
         }
-
-        return response()->json([
-            'key' => $key,
-            'value' => $value,
-        ]);
     }
 
     /**
-     * Update a setting (admin only)
+     * Update setting
+     *
+     * Updates a single setting value.
+     * Requires admin permission.
      *
      * @OA\Put(
-     *     path="/api/system-settings/{key}",
-     *     summary="Update a setting value (admin only)",
-     *     description="Updates the value of a specific setting key",
+     *     path="/system-settings/{key}",
+     *     operationId="updateSetting",
      *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
+     *     summary="Update setting",
+     *     description="Update setting value",
+     *     security={{"sanctum":{}}},
      *     @OA\Parameter(
      *         name="key",
      *         in="path",
      *         required=true,
-     *         description="Setting key (e.g., 'site.name')",
+     *         description="Setting key",
      *         @OA\Schema(type="string")
      *     ),
      *     @OA\RequestBody(
      *         required=true,
-     *         description="Setting value",
      *         @OA\JsonContent(
-     *             type="object",
      *             required={"value"},
-     *             @OA\Property(
-     *                 property="value",
-     *                 type="string",
-     *                 description="New value for the setting"
-     *             )
+     *             @OA\Property(property="value", type="string", example="new value")
      *         )
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Setting updated successfully",
+     *         description="Setting updated",
      *         @OA\JsonContent(
-     *             type="object",
-     *             example={
-     *                 "message": "Setting updated successfully",
-     *                 "key": "site.name",
-     *                 "value": "New Site Name"
-     *             }
+     *             @OA\Property(property="http_status", type="integer", example=200),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="Setting updated successfully"),
+     *             @OA\Property(property="data", type="object")
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Forbidden - Admin access required"
-     *     ),
-     *     @OA\Response(
-     *         response=404,
-     *         description="Setting not found"
-     *     ),
-     *     @OA\Response(
-     *         response=422,
-     *         description="Validation error"
+     *     @OA\Response(response=400, description="Invalid input"),
+     *     @OA\Response(response=403, description="Forbidden"),
+     *     @OA\Response(response=404, description="Setting not found"),
+     *     @OA\Response(response=500, description="Internal server error")
      *     )
-     * )
+     *
+     * @param Request $request
+     * @param string $key
+     * @return JsonResponse
      */
     public function update(Request $request, string $key): JsonResponse
     {
-        // Admin authorization check
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'super_admin'])) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $request->validate([
-            'value' => 'required',
-        ]);
-
         try {
-            $setting = $this->settingService->set($key, $request->input('value'));
-
-            return response()->json([
-                'message' => 'Setting updated successfully',
-                'key' => $key,
-                'value' => $setting->value,
+            $validated = $request->validate([
+                'value' => 'required',
             ]);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 422);
+
+            $setting = $this->settingService->getSetting($key);
+            if (!$setting) {
+                return $this->notFoundResponse('Setting', $key);
+            }
+
+            $this->authorize('update', SystemSetting::class);
+
+            $updated = $this->settingService->set($key, $validated['value'], $setting->topic);
+
+            $this->logAudit('update', 'SystemSetting', ['old' => $setting->value, 'new' => $validated['value']], $setting->id, 'success');
+
+            return $this->successResponse($updated, 'Setting updated successfully', 200);
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Update Setting', ['key' => $key, 'user_id' => Auth::id()]);
         }
     }
 
     /**
-     * Get site-specific settings
+     * Export settings
+     *
+     * Exports all settings as JSON.
      *
      * @OA\Get(
-     *     path="/api/system-settings/category/site",
-     *     summary="Get site configuration settings",
-     *     description="Returns all site-specific settings (name, logo, footer, theme, etc.)",
+     *     path="/system-settings/export",
+     *     operationId="exportSettings",
      *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
+     *     summary="Export all settings",
+     *     description="Export settings as JSON",
+     *     security={{"sanctum":{}}},
      *     @OA\Response(
      *         response=200,
-     *         description="Successfully retrieved site settings"
-     *     )
+     *         description="Settings exported",
+     *         @OA\JsonContent(type="object")
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
-     */
-    public function siteSettings(): JsonResponse
-    {
-        return response()->json($this->settingService->getSiteSettings());
-    }
-
-    /**
-     * Get dealership-specific settings
      *
-     * @OA\Get(
-     *     path="/api/system-settings/category/dealership",
-     *     summary="Get dealership information settings",
-     *     description="Returns dealership name, address, contact details, etc.",
-     *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Successfully retrieved dealership settings"
-     *     )
-     * )
+     * @return JsonResponse
      */
-    public function dealershipSettings(): JsonResponse
+    public function exportSettings(): JsonResponse
     {
-        return response()->json($this->settingService->getDealershipSettings());
-    }
-
-    /**
-     * Get pricing-specific settings
-     *
-     * @OA\Get(
-     *     path="/api/system-settings/category/pricing",
-     *     summary="Get pricing configuration settings",
-     *     description="Returns tax rates, GST, TDS, and other pricing-related settings",
-     *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Successfully retrieved pricing settings"
-     *     )
-     * )
-     */
-    public function pricingSettings(): JsonResponse
-    {
-        return response()->json($this->settingService->getPricingSettings());
-    }
-
-    /**
-     * Export all settings as JSON
-     *
-     * @OA\Get(
-     *     path="/api/system-settings/export/json",
-     *     summary="Export all settings as JSON",
-     *     description="Returns all settings in JSON format for backup or migration",
-     *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
-     *     @OA\Response(
-     *         response=200,
-     *         description="Settings exported successfully"
-     *     )
-     * )
-     */
-    public function exportJson(): JsonResponse
-    {
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'super_admin'])) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        try {
+            $settings = $this->settingService->all();
+            return $this->successResponse($settings, 'Settings exported successfully', 200);
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Export Settings', ['user_id' => Auth::id()]);
         }
-
-        return response()->json(SystemSetting::allForExport());
     }
 
     /**
-     * Import settings from JSON
+     * Import settings
+     *
+     * Imports settings from JSON array.
+     * Requires admin permission.
      *
      * @OA\Post(
-     *     path="/api/system-settings/import/json",
-     *     summary="Import settings from JSON (admin only)",
-     *     description="Imports system settings from a JSON file",
+     *     path="/system-settings/import",
+     *     operationId="importSettings",
      *     tags={"System Settings"},
-     *     security={{"bearerAuth":{}}},
+     *     summary="Import settings",
+     *     description="Import settings from JSON",
+     *     security={{"sanctum":{}}},
      *     @OA\RequestBody(
      *         required=true,
-     *         description="JSON file with settings",
-     *         @OA\JsonContent(
-     *             type="array",
-     *             items=@OA\Items(
-     *                 type="object",
-     *                 required={"key", "value"},
-     *                 @OA\Property(property="key", type="string"),
-     *                 @OA\Property(property="value", type="string"),
-     *                 @OA\Property(property="topic", type="string"),
-     *             )
-     *         )
+     *         @OA\JsonContent(type="array", @OA\Items(type="object"))
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Settings imported successfully"
-     *     )
+     *         description="Import completed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="imported", type="integer"),
+     *             @OA\Property(property="failed", type="integer")
+     *         )
+     *     ),
+     *     @OA\Response(response=403, description="Forbidden"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
-    public function importJson(Request $request): JsonResponse
+    public function importSettings(Request $request): JsonResponse
     {
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'super_admin'])) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+        try {
+            $this->authorize('import', SystemSetting::class);
 
-        $request->validate([
-            'settings' => 'required|array',
-        ]);
+            $settings = $request->json()->all();
+            $imported = 0;
+            $failed = 0;
+            $errors = [];
 
-        $imported = 0;
-        $failed = [];
-
-        foreach ($request->input('settings', []) as $setting) {
-            try {
-                SystemSetting::updateOrCreate(
-                    ['key' => $setting['key'] ?? null],
-                    [
-                        'value' => $setting['value'] ?? null,
-                        'topic' => $setting['topic'] ?? null,
-                        'type' => $setting['type'] ?? 'string',
-                    ]
-                );
-                $imported++;
-            } catch (\Exception $e) {
-                $failed[] = [
-                    'key' => $setting['key'] ?? 'unknown',
-                    'error' => $e->getMessage(),
-                ];
+            foreach ($settings as $setting) {
+                try {
+                    $this->settingService->set($setting['key'], $setting['value'], $setting['topic'] ?? null);
+                    $imported++;
+                } catch (Throwable $e) {
+                    $failed++;
+                    $errors[] = [
+                        'key' => $setting['key'] ?? 'unknown',
+                        'error' => $e->getMessage(),
+                    ];
+                    Log::error('Failed to import setting', [
+                        'key' => $setting['key'] ?? 'unknown',
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
-        }
 
-        return response()->json([
-            'message' => 'Import completed',
-            'imported' => $imported,
-            'failed' => $failed,
-        ]);
+            Log::info('Settings import completed', [
+                'imported' => $imported,
+                'failed' => $failed,
+                'user_id' => Auth::id(),
+            ]);
+
+            $this->logAudit(
+                'import',
+                'SystemSetting',
+                ['imported' => $imported, 'failed' => $failed],
+                null,
+                $failed === 0 ? 'success' : 'partial'
+            );
+
+            return $this->successResponse(
+                [
+                    'imported' => $imported,
+                    'failed' => $failed,
+                    'errors' => !empty($errors) ? $errors : null,
+                ],
+                'Import completed',
+                200
+            );
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Import Settings', [
+                'user_id' => Auth::id(),
+            ]);
+        }
     }
 }

@@ -2,21 +2,35 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use Illuminate\Http\Request;
+use App\Http\Controllers\BaseController;
+use App\Services\AuthService;
 use Illuminate\Http\JsonResponse;
-use App\Http\Controllers\Controller;
-use App\Services\AuthenticationService;
-use OpenApi\Annotations as OA;
+use Illuminate\Http\Request;
+use Throwable;
+use Illuminate\Support\Facades\Log;
 
 /**
+ * Authentication Controller
+ *
+ * Handles user authentication via OTP (One-Time Password)
+ * - Request OTP: Send OTP to user's registered mobile and email
+ * - Verify OTP: Validate OTP and issue authentication token
+ * - Get Profile: Retrieve current authenticated user details
+ * - Logout: Revoke authentication token
+ *
+ * Rate Limiting:
+ * - OTP Request: Max 3 requests per 15 minutes per mobile
+ * - OTP Verification: Max 5 attempts per 15 minutes per mobile
+ * - Account Lock: 30 minutes after 5 failed verification attempts
+ *
+ * All timestamps returned in ISO 8601 format (2025-12-24T18:30:00Z)
+ *
  * @OA\Info(
- *     title="VDMS Auth API",
+ *     title="VDMS API",
  *     version="1.0.0",
- *     description="Vehic le Dealership Management System - Authentication API",
+ *     description="Vehicle Dealership Management System API",
  *     contact={
- *         "name": "API Support",
- *         "url": "https://waba.insightechindia.in/public/",
- *         "email": "support@bmpl.com"
+ *         "email": "support@vdms.com"
  *     }
  * )
  *
@@ -24,40 +38,49 @@ use OpenApi\Annotations as OA;
  *     url="http://localhost/vdms/public/api/v1",
  *     description="Development Server"
  * )
- *
+ * 
  * @OA\Server(
- *     url="https://waba.insightechindia.in/public/api/v1",
+ *     url="https://waba.insightechindia.in/public/api/v1/",
  *     description="Production Server"
  * )
+ * 
  *
- * @OA\SecurityScheme(
- *     type="http",
- *     scheme="bearer",
- *     bearerFormat="token",
- *     securityScheme="sanctum"
+ * @OA\Components(
+ *     @OA\SecurityScheme(
+ *         type="http",
+ *         scheme="bearer",
+ *         bearerFormat="sanctum",
+ *         securityScheme="sanctum"
+ *     )
  * )
  */
-class AuthController extends Controller
+class AuthController extends BaseController
 {
-    private AuthenticationService $authService;
+    protected AuthService $authService;
 
-    public function __construct(AuthenticationService $authService)
+    public function __construct(AuthService $authService)
     {
         $this->authService = $authService;
     }
 
     /**
+     * Request OTP
+     *
+     * Sends OTP to user's registered mobile and email.
+     * Validates mobile format and checks if registered.
+     * Rate limited to 3 requests per 15 minutes.
+     *
      * @OA\Post(
      *     path="/auth/request-otp",
+     *     operationId="requestOtp",
      *     tags={"Authentication"},
-     *     summary="Request OTP for login",
-     *     description="Send OTP to registered mobile and email. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+     *     summary="Request OTP for authentication",
+     *     description="Generate and send OTP to mobile and email",
      *     @OA\RequestBody(
      *         required=true,
-     *         description="Mobile number to receive OTP",
      *         @OA\JsonContent(
      *             required={"mobile"},
-     *             @OA\Property(property="mobile", type="string", example="9876543210", description="10-digit mobile number (India)")
+     *             @OA\Property(property="mobile", type="string", example="9310260721", description="10-digit Indian mobile number")
      *         )
      *     ),
      *     @OA\Response(
@@ -66,316 +89,214 @@ class AuthController extends Controller
      *         @OA\JsonContent(
      *             @OA\Property(property="http_status", type="integer", example=200),
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="code", type="string", example="S001"),
+     *             @OA\Property(property="code", type="string", example="S200"),
      *             @OA\Property(property="message", type="string", example="OTP sent to your registered mobile and email"),
      *             @OA\Property(property="data", type="object",
-     *                 @OA\Property(property="otp", type="string", example="123456", description="OTP (remove in production)"),
-     *                 @OA\Property(property="expires_at", type="string", format="date-time", example="2025-12-17T02:07:00Z")
-     *             )
+     *                 @OA\Property(property="mobile", type="string", example="9310260721"),
+     *                 @OA\Property(property="expires_at", type="string", format="date-time", example="2025-12-24T18:40:00Z"),
+     *                 @OA\Property(property="expires_in_minutes", type="integer", example=10),
+     *                 @OA\Property(property="otp", type="string", example="123456", description="OTP shown only in local environment")
+     *             ),
+     *             @OA\Property(property="timestamp", type="string", format="date-time")
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=404,
-     *         description="Mobile not registered",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=404),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E002"),
-     *             @OA\Property(property="message", type="string", example="Mobile not registered")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Account locked or exceeds rate limit",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=403),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E004"),
-     *             @OA\Property(property="message", type="string", example="Account locked. Contact admin")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=429,
-     *         description="Rate limit exceeded",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=429),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E005"),
-     *             @OA\Property(property="message", type="string", example="Too many OTP requests. Try again later")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="Server error",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=500),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E500"),
-     *             @OA\Property(property="message", type="string", example="Internal server error")
-     *         )
-     *     )
+     *     @OA\Response(response=400, description="Invalid mobile format"),
+     *     @OA\Response(response=404, description="Mobile not registered"),
+     *     @OA\Response(response=429, description="Too many requests"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function requestOtp(Request $request): JsonResponse
     {
-        // try {
-        $validated = $request->validate([
-            'mobile' => 'required|string|regex:/^[0-9]{10}$/',
-        ], [
-            'mobile.required' => 'Mobile number is required',
-            'mobile.regex' => 'Mobile must be 10 digits',
-        ]);
+        try {
+            $validated = $request->validate([
+                'mobile' => 'required|string|min:10|max:10',
+            ]);
 
-        $result = $this->authService->requestOtp($validated['mobile']);
+            $result = $this->authService->requestOtp($validated['mobile'], $request);
 
-        if (!$result['success']) {
-            return response()->json([
-                'http_status' => $result['error']['http_status'],
-                'success' => false,
-                'code' => $result['error']['code'],
-                'message' => $result['error']['message'],
-            ], $result['error']['http_status']);
+            return $this->successResponse(
+                $result['data'],
+                $result['message'] ?? 'OTP sent successfully',
+                200
+            );
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Request OTP', [
+                'mobile' => $request->input('mobile'),
+                'ip_address' => $request->ip(),
+            ]);
         }
-
-        return response()->json([
-            'http_status' => 200,
-            'success' => true,
-            'code' => 'S001',
-            'message' => 'SMS : OTP Sent Successfully',
-            'data' => $result['data'],
-        ], 200);
-        // } catch (\Illuminate\Validation\ValidationException $e) {
-        //     return response()->json([
-        //         'http_status' => 422,
-        //         'success' => false,
-        //         'code' => 'E422',
-        //         'message' => 'Validation failed',
-        //         'errors' => $e->errors(),
-        //     ], 422);
-        // } catch (\Exception $e) {
-        //     return response()->json([
-        //         'http_status' => 500,
-        //         'success' => false,
-        //         'code' => 'E500',
-        //         'message' => 'Internal server error',
-        //     ], 500);
-        // }
     }
 
     /**
+     * Verify OTP
+     *
+     * Validates OTP and issues authentication token.
+     * Binds device session and enforces device limit (max 5).
+     * Rate limited to 5 attempts per 15 minutes.
+     *
      * @OA\Post(
      *     path="/auth/verify-otp",
+     *     operationId="verifyOtp",
      *     tags={"Authentication"},
-     *     summary="Verify OTP and bind device for login",
-     *     description="Verify OTP code and create session. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+     *     summary="Verify OTP and get authentication token",
+     *     description="Validate OTP and issue Sanctum token",
      *     @OA\RequestBody(
      *         required=true,
-     *         description="OTP verification data",
      *         @OA\JsonContent(
      *             required={"mobile","otp","device_id","device_name","platform"},
-     *             @OA\Property(property="mobile", type="string", example="9876543210", description="10-digit mobile number"),
-     *             @OA\Property(property="otp", type="string", example="123456", description="6-digit OTP"),
-     *             @OA\Property(property="device_id", type="string", example="uuid-1234-5678-9012", description="Unique device identifier"),
-     *             @OA\Property(property="device_name", type="string", example="iPhone 14 Pro", description="Device name"),
-     *             @OA\Property(property="platform", type="string", example="iOS", enum={"iOS", "Android", "Web"}, description="Device platform")
+     *             @OA\Property(property="mobile", type="string", example="9310260721"),
+     *             @OA\Property(property="otp", type="string", example="123456"),
+     *             @OA\Property(property="device_id", type="string", example="unique-device-uuid"),
+     *             @OA\Property(property="device_name", type="string", example="iPhone 14"),
+     *             @OA\Property(property="platform", type="string", enum={"android","ios","web"}),
+     *             @OA\Property(property="platform_version", type="string", example="iOS 16.0"),
+     *             @OA\Property(property="fcm_token", type="string", example="fcm-push-token")
      *         )
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="Login successful",
+     *         description="OTP verified successfully",
      *         @OA\JsonContent(
      *             @OA\Property(property="http_status", type="integer", example=200),
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="code", type="string", example="S001"),
-     *             @OA\Property(property="message", type="string", example="Login successful"),
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="OTP verified"),
      *             @OA\Property(property="data", type="object",
-     *                 @OA\Property(property="token", type="string", example="1|abcdef123456...", description="Bearer token for subsequent requests"),
+     *                 @OA\Property(property="token", type="string", example="1|random-token-string"),
+     *                 @OA\Property(property="expires_at", type="string", format="date-time"),
      *                 @OA\Property(property="user", type="object",
-     *                     @OA\Property(property="id", type="integer", example=5),
-     *                     @OA\Property(property="name", type="string", example="Super Admin"),
-     *                     @OA\Property(property="email", type="string", example="super.admin@bmpl.com"),
-     *                     @OA\Property(property="mobile", type="string", example="9876543210"),
-     *                     @OA\Property(property="code", type="string", example="SUP001")
+     *                     @OA\Property(property="id", type="integer"),
+     *                     @OA\Property(property="name", type="string"),
+     *                     @OA\Property(property="email", type="string"),
+     *                     @OA\Property(property="mobile", type="string"),
+     *                     @OA\Property(property="role", type="string")
      *                 )
-     *             )
+     *             ),
+     *             @OA\Property(property="timestamp", type="string", format="date-time")
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Invalid or expired OTP",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=401),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E002"),
-     *             @OA\Property(property="message", type="string", example="Invalid OTP")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=403,
-     *         description="Account locked due to failed attempts",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=403),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E004"),
-     *             @OA\Property(property="message", type="string", example="Account locked due to failed attempts")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=404,
-     *         description="Mobile not registered",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=404),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E002"),
-     *             @OA\Property(property="message", type="string", example="Mobile not registered")
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="Server error",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="http_status", type="integer", example=500),
-     *             @OA\Property(property="success", type="boolean", example=false),
-     *             @OA\Property(property="code", type="string", example="E500"),
-     *             @OA\Property(property="message", type="string", example="Internal server error")
-     *         )
-     *     )
+     *     @OA\Response(response=400, description="Invalid input"),
+     *     @OA\Response(response=401, description="Invalid or expired OTP"),
+     *     @OA\Response(response=403, description="Account locked"),
+     *     @OA\Response(response=429, description="Too many attempts"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function verifyOtp(Request $request): JsonResponse
     {
-        // try {
-        //print_r($request->all());
-        $validated = $request->validate([
-            'mobile' => 'required|string|regex:/^[0-9]{10}$/',
-            'otp' => 'required|string|regex:/^[0-9]{6}$/',
-            'device_id' => 'required|string|max:255',
-            'device_name' => 'required|string|max:255',
-            'platform' => 'required|string|in:iOS,Android,Web',
-        ], [
-            'mobile.regex' => 'Mobile must be 10 digits',
-            'otp.regex' => 'OTP must be 6 digits',
-            'platform.in' => 'Platform must be iOS, Android, or Web',
-        ]);
+        try {
+            $validated = $request->validate([
+                'mobile' => 'required|string|min:10|max:10',
+                'otp' => 'required|string|min:6|max:6',
+                'device_id' => 'required|string|max:255',
+                'device_name' => 'required|string|max:255',
+                'platform' => 'required|string|in:android,Android,ios,iOS,web,Web',
+                'platform_version' => 'string|max:50',
+                'fcm_token' => 'string|max:255',
+            ]);
 
-        $result = $this->authService->verifyOtp(
-            $validated['mobile'],
-            $validated['otp'],
-            $validated['device_id'],
-            $validated['device_name'],
-            $validated['platform']
-        );
-        //print_r($result);
-        if (!$result['success']) {
-            return response()->json([
-                'http_status' => $result['http_status'],
-                'success' => false,
-                'code' => $result['code'],
-                'message' => $result['message'],
-            ], $result['http_status']);
+            $result = $this->authService->verifyOtp(
+                $validated['mobile'],
+                $validated['otp'],
+                $validated['device_id'],
+                $validated['device_name'],
+                $validated['platform'],
+                $request
+            );
+
+            return $this->successResponse(
+                $result['data'],
+                $result['message'] ?? 'OTP verified successfully',
+                200
+            );
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Verify OTP', [
+                'mobile' => $request->input('mobile'),
+                'ip_address' => $request->ip(),
+            ]);
         }
-
-        return response()->json([
-            'http_status' => 200,
-            'success' => true,
-            'code' => 'S001',
-            'message' => 'Login successful',
-            'data' => $result['data'],
-        ], 200);
-        // } catch (\Illuminate\Validation\ValidationException $e) {
-        //     return response()->json([
-        //         'http_status' => 422,
-        //         'success' => false,
-        //         'code' => 'E422',
-        //         'message' => 'Validation failed',
-        //         'errors' => $e->errors(),
-        //     ], 422);
-        // } catch (\Exception $e) {
-        //     return response()->json([
-        //         'http_status' => 500,
-        //         'success' => false,
-        //         'code' => 'E500',
-        //         'message' => 'Internal server error',
-        //     ], 500);
-        // }
     }
 
     /**
+     * Get Profile
+     *
+     * Retrieves authenticated user details including roles and permissions.
+     *
      * @OA\Get(
      *     path="/auth/me",
+     *     operationId="getProfile",
      *     tags={"Authentication"},
-     *     summary="Get current user details",
-     *     description="Retrieve authenticated user details. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+     *     summary="Get authenticated user profile",
+     *     description="Retrieve current user details",
      *     security={{"sanctum":{}}},
      *     @OA\Response(
      *         response=200,
-     *         description="User details retrieved successfully",
+     *         description="User profile retrieved",
      *         @OA\JsonContent(
      *             @OA\Property(property="http_status", type="integer", example=200),
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="code", type="string", example="S001"),
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="User profile retrieved"),
      *             @OA\Property(property="data", type="object",
-     *                 @OA\Property(property="id", type="integer", example=5),
-     *                 @OA\Property(property="name", type="string", example="Super Admin"),
-     *                 @OA\Property(property="email", type="string", example="super.admin@bmpl.com"),
-     *                 @OA\Property(property="mobile", type="string", example="9876543210"),
-     *                 @OA\Property(property="code", type="string", example="SUP001"),
-     *                 @OA\Property(property="is_active", type="boolean", example=true),
-     *                 @OA\Property(property="created_at", type="string", format="date-time")
-     *             )
+     *                 @OA\Property(property="id", type="integer"),
+     *                 @OA\Property(property="name", type="string"),
+     *                 @OA\Property(property="email", type="string"),
+     *                 @OA\Property(property="mobile", type="string"),
+     *                 @OA\Property(property="role", type="string"),
+     *                 @OA\Property(property="permissions", type="array", @OA\Items(type="string"))
+     *             ),
+     *             @OA\Property(property="timestamp", type="string", format="date-time")
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized - No valid token provided"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="Server error"
-     *     )
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function me(Request $request): JsonResponse
     {
-        // try {
-        $user = $request->user('sanctum');
-        //print_r($user->toarray());
+        try {
+            $user = $request->user('sanctum');
 
-        if (!$user) {
-            return response()->json([
-                'http_status' => 401,
-                'success' => false,
-                'code' => 'E001',
-                'message' => 'Unauthorized',
-            ], 401);
+            if (!$user) {
+                return $this->unauthorizedResponse('No authenticated user found');
+            }
+
+            $result = $this->authService->getUserDetails($user);
+
+            return $this->successResponse(
+                $result['data'],
+                $result['message'] ?? 'User profile retrieved successfully',
+                200
+            );
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Get Profile', [
+                'user_id' => auth('sanctum')->id(),
+                'ip_address' => $request->ip(),
+            ]);
         }
-
-        $result = $this->authService->me($user);
-        //print_r($result);
-        //return response()->json($result, $result['http_status']);
-
-        return response()->json([
-            'http_status' => 200,
-            'success' => true,
-            'code' => 'S001',
-            'data' => $result['data'],
-        ], 200);
-        // } catch (\Exception $e) {
-        //     return response()->json([
-        //         'http_status' => 500,
-        //         'success' => false,
-        //         'code' => 'E500',
-        //         'message' => 'Internal server error',
-        //     ], 500);
-        // }
     }
 
     /**
+     * Logout
+     *
+     * Revokes the current authentication token.
+     *
      * @OA\Post(
      *     path="/auth/logout",
+     *     operationId="logout",
      *     tags={"Authentication"},
-     *     summary="Logout and revoke token",
-     *     description="Invalidate current session token. Dev: http://localhost/vdms/public/api/v1 | Prod: https://waba.insightechindia.in/public/api/v1",
+     *     summary="Logout authenticated user",
+     *     description="Revoke current token",
      *     security={{"sanctum":{}}},
      *     @OA\Response(
      *         response=200,
@@ -383,58 +304,52 @@ class AuthController extends Controller
      *         @OA\JsonContent(
      *             @OA\Property(property="http_status", type="integer", example=200),
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="code", type="string", example="S001"),
-     *             @OA\Property(property="message", type="string", example="Logged out successfully")
+     *             @OA\Property(property="code", type="string", example="S200"),
+     *             @OA\Property(property="message", type="string", example="Logged out successfully"),
+     *             @OA\Property(property="timestamp", type="string", format="date-time")
      *         )
      *     ),
-     *     @OA\Response(
-     *         response=401,
-     *         description="Unauthorized - No valid token provided"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="Server error"
-     *     )
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=500, description="Internal server error")
      * )
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function logout(Request $request): JsonResponse
     {
-        // try {
-        $user = $request->user('sanctum');
+        try {
+            $user = $request->user('sanctum');
 
-        if (!$user) {
-            return response()->json([
-                'http_status' => 401,
-                'success' => false,
-                'code' => 'E001',
-                'message' => 'Unauthorized',
-            ], 401);
+            if (!$user) {
+                return $this->unauthorizedResponse('No authenticated user found');
+            }
+
+            Log::info('User logout initiated', [
+                'user_id' => $user->id,
+                'ip_address' => $request->ip(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $result = $this->authService->logout($user);
+
+            Log::info('User logged out successfully', [
+                'user_id' => $user->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->logAudit('logout', 'User', [], $user->id, 'success');
+
+            return $this->successResponse(
+                null,
+                'Logged out successfully',
+                200
+            );
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Logout', [
+                'user_id' => auth('sanctum')->id(),
+                'ip_address' => $request->ip(),
+            ]);
         }
-
-        $result = $this->authService->logout($user);
-
-        if (!$result['success']) {
-            return response()->json([
-                'http_status' => 500,
-                'success' => false,
-                'code' => 'E500',
-                'message' => $result['message'] ?? 'Error during logout',
-            ], 500);
-        }
-
-        return response()->json([
-            'http_status' => 200,
-            'success' => true,
-            'code' => 'S001',
-            'message' => 'Logged out successfully',
-        ], 200);
-        // } catch (\Exception $e) {
-        //     return response()->json([
-        //         'http_status' => 500,
-        //         'success' => false,
-        //         'code' => 'E500',
-        //         'message' => 'Internal server error',
-        //     ], 500);
-        // }
     }
 }
