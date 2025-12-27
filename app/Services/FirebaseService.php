@@ -20,8 +20,7 @@ class FirebaseService
     {
         try {
             $factory = (new Factory())
-                ->withServiceAccount(config('firebase.credentials'))
-                ->withDefaultAuth();
+                ->withServiceAccount(config('firebase.credentials')); //->withDefaultAuth()
 
             $this->messaging = $factory->createMessaging();
             $this->projectId = config('firebase.project_id');
