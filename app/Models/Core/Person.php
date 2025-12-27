@@ -3,14 +3,11 @@
 namespace App\Models\Core;
 
 use App\Models\BaseModel;
-use Backpack\CRUD\app\Models\Traits\CrudTrait;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\User; 
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Person extends BaseModel
 {
-    use CrudTrait;
-    use HasFactory;
     protected $table = 'persons';
 
     protected $fillable = [
@@ -23,142 +20,91 @@ class Person extends BaseModel
         'gender',
         'dob',
         'marital_status',
+        'marriage_date',
         'spouse_name',
+        'no_of_children',
+        'fathers_name',
+        'mothers_name',
         'occupation',
+        'blood_group',
+        'nationality',
         'aadhaar_no',
         'pan_no',
         'gst_no',
+        'passport_no',
         'mobile_primary',
         'mobile_secondary',
         'email_primary',
         'email_secondary',
+        'address_line1',
+        'city',
+        'state',
+        'country',
+        'pincode',
         'extra_data',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
         'dob' => 'date',
-        'extra_data' => 'array',
+        'marriage_date' => 'date',
+        'no_of_children' => 'integer',
+        'extra_data' => 'json',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
 
+    // ════════════════════════════════════════════════════════
+    // RELATIONSHIPS
+    // ════════════════════════════════════════════════════════
+
     /**
-     * Relationship: Addresses
+     * One-to-one relationship to Employee
+     * Person is the parent, Employee is child
      */
-    public function addresses()
+    public function employee(): HasOne
     {
-        return $this->hasMany(PersonAddress::class);
+        return $this->hasOne(Employee::class, 'person_id');
     }
 
     /**
-     * Relationship: Contacts
+     * One-to-one relationship to User
+     * A Person may or may not have a User account
      */
-    public function contacts()
+    public function user(): HasOne
     {
-        return $this->hasMany(PersonContact::class);
+        return $this->hasOne(\App\Models\User::class, 'person_id');
     }
 
     /**
-     * Relationship: Banking details
+     * Banking details (reusable: Employee, DSA, Customer, etc.)
      */
-    public function bankingDetails()
+    public function bankingDetails(): HasMany
     {
-        return $this->hasMany(PersonBankingDetail::class);
+        return $this->hasMany(PersonBankingDetail::class, 'person_id');
     }
 
-    /**
-     * Relationship: Garages
-     */
-    public function garages()
+    // ════════════════════════════════════════════════════════
+    // SCOPES
+    // ════════════════════════════════════════════════════════
+
+    public function scopeSearch($query, string $term)
     {
-        return $this->hasMany(Garage::class);
+        return $query->where('first_name', 'like', "%$term%")
+            ->orWhere('last_name', 'like', "%$term%")
+            ->orWhere('email_primary', 'like', "%$term%")
+            ->orWhere('mobile_primary', 'like', "%$term%")
+            ->orWhere('pan_no', strtoupper($term));
     }
 
-    /**
-     * Relationship: Employee record (if person is employee)
-     */
-    public function employee()
-    {
-        return $this->hasOne(Employee::class);
-    }
+    // ════════════════════════════════════════════════════════
+    // ACCESSORS
+    // ════════════════════════════════════════════════════════
 
-    /**
-     * Relationship: User record (if person has login)
-     */
-    public function user()
-    {
-        return $this->hasOne(User::class);
-    }
-
-    /**
-     * Relationship: Department heads
-     */
-    public function headedDepartments()
-    {
-        return $this->hasMany(Department::class, 'head_id');
-    }
-
-    /**
-     * Relationship: Division heads
-     */
-    public function headedDivisions()
-    {
-        return $this->hasMany(Division::class, 'head_id');
-    }
-
-    /**
-     * Scope: Search persons
-     */
-    public function scopeSearch($query, $term)
-    {
-        return $query->where('first_name', 'like', "%{$term}%")
-            ->orWhere('last_name', 'like', "%{$term}%")
-            ->orWhere('display_name', 'like', "%{$term}%")
-            ->orWhere('email_primary', 'like', "%{$term}%")
-            ->orWhere('mobile_primary', 'like', "%{$term}%");
-    }
-
-    /**
-     * Get full name
-     */
-    public function getFullNameAttribute()
+    public function getFullNameAttribute(): string
     {
         return trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
-    }
-
-    /**
-     * Get primary contact
-     */
-    public function getPrimaryContactAttribute()
-    {
-        return $this->contacts()
-            ->where('is_primary', true)
-            ->first() ?? $this->contacts()->first();
-    }
-
-    /**
-     * Generate auto code
-     */
-    public static function generateCode()
-    {
-        $lastId = self::withTrashed()->max('id') ?? 0;
-        return 'PERS-' . str_pad($lastId + 1, 6, '0', STR_PAD_LEFT);
-    }
-
-    /**
-     * Register media collections
-     */
-    public function registerMediaCollections(): void
-    {
-        parent::registerMediaCollections();
-
-        $this->addMediaCollection('identity_documents')
-            ->acceptsMimeTypes(['application/pdf', 'image/jpeg', 'image/png'])
-            ->useDisk('public');
-
-        $this->addMediaCollection('profile_photos')
-            ->acceptsMimeTypes(['image/jpeg', 'image/png'])
-            ->useDisk('public');
     }
 }

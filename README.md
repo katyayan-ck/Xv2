@@ -1,59 +1,106 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# VDMS - Vehicle Dealership Management System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+VDMS is a comprehensive Laravel-based system for managing vehicle dealership operations. It includes features for authentication, notifications, entity history tracking, document management, RBAC (Role-Based Access Control), data scoping, approvals, and more. Built with Backpack for admin CRUD, L5-Swagger for API documentation, Spatie packages for permissions/media, and custom services for business logic.
 
-## About Laravel
+## Features
+- **Authentication**: OTP-based login with rate limiting, account locking, and device binding.
+- **Notifications**: FCM push, alerts, messages with threading.
+- **Entity History**: Track status/communications for entities (bookings, quotes) or standalone (chats) with threaded comments, attachments, and notifications.
+- **Document Management**: Upload/share/track documents with versioning, expiry notifications, AI tagging (Google Vision, toggleable), groups/caches, dynamic access (combos: role/dept/branch/scope), search (Scout), analytics.
+- **RBAC & Scoping**: Role/permission management with data scopes (branch/location/dept/vertical/brand).
+- **Approvals**: Hierarchical workflows with graph-based traversal.
+- **API Documentation**: Multi-page Swagger (e.g., separate for docs/notifications).
+- **Integrations**: Firebase, Google Cloud Vision, Excel exports, audits.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Requirements
+- PHP 8.2+
+- Laravel 12+
+- MySQL/MariaDB
+- Composer
+- Node.js/NPM (for assets if using frontend)
+- Google Cloud account (for Vision AI—optional)
+- Firebase project (for notifications)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Installation Instructions
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Follow these steps to set up VDMS locally. This assumes a fresh install; adjust for existing setups.
 
-## Learning Laravel
+### Step 1: Clone the Repository
+```bash
+git clone https://your-repo-url/vdms.git
+cd vdms
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### Step 2: Install Dependencies
+Run Composer to install PHP packages:
+```bash
+composer install
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+If using frontend (e.g., Backpack/Tabler theme):
+```bash
+npm install && npm run dev
+```
 
-## Laravel Sponsors
+### Step 3: Set Up Environment
+Copy the example env file:
+```bash
+cp .env.example .env
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Edit `.env`:
+- Database: `DB_DATABASE=vdms`, `DB_USERNAME=root`, `DB_PASSWORD=`.
+- App Key: Run `php artisan key:generate`.
+- Sanctum: For API auth.
+- Firebase: Add credentials (JSON path) for notifications.
+- Google Vision: Add `GOOGLE_APPLICATION_CREDENTIALS=storage/app/google/key.json` (upload key.json first).
+- Other: Mail, queue driver (e.g., database for expiries).
 
-### Premium Partners
+### Step 4: Database Setup
+Create the database (e.g., via phpMyAdmin or CLI: `mysql -u root -p -e "CREATE DATABASE vdms;"`).
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Import SQL dumps (from provided files, e.g., vdms.sql):
+```bash
+mysql -u root -p vdms < database/vdms.sql
+```
+
+Run seeds for initial data (roles, keyvalues, settings):
+```bash
+php artisan db:seed
+```
+
+### Step 5: Configure Backpack & Spatie
+- Backpack: Run `php artisan backpack:install` if not done.
+- Permissions: `php artisan migrate` (for Spatie tables if not in SQL).
+- Media: Configure Spatie media in config/filesystems.php (e.g., disk 'public').
+- Scout: For search, install Meilisearch/Algolia, run `php artisan scout:import "App\Models\Core\Document"`.
+
+### Step 6: Set Up Google Cloud Vision (Optional for AI Tagging)
+1. Create Google Cloud project, enable Vision API.
+2. Generate service account key (JSON).
+3. Upload to `storage/app/google/key.json`.
+4. Toggle in DB: Insert into system_settings (key: 'ai_tagging_enabled', value: 1) or use admin panel.
+
+### Step 7: Run the Application
+```bash
+php artisan serve
+```
+Access at http://localhost:8000. Admin: /admin (login with seeded user).
+
+For API: http://localhost:8000/api/v1 (Swagger at /api/docs).
+
+### Step 8: Additional Setup
+- Cron for Expiry: In app/Console/Kernel.php, add schedule for daily checks (call DocService::checkExpiries()).
+- Queue: `php artisan queue:work` for notifications/jobs.
+- Testing: Run `php artisan test`.
+
+## Usage
+- **Admin Panel**: Use Backpack for CRUD (e.g., /admin/documents).
+- **API**: See Swagger for endpoints (e.g., POST /api/v1/docs/upload).
+- **Custom**: Use DocService in controllers for logic.
 
 ## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Fork, branch, PR. Follow Laravel standards.
 
 ## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT. See LICENSE file.
