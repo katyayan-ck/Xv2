@@ -4,31 +4,30 @@ namespace App\Http\Controllers\Admin;
 
 use Backpack\CRUD\app\Http\Controllers\CrudController;
 use Backpack\CRUD\app\Library\CrudPanel\CrudPanelFacade as CRUD;
-use \Backpack\CRUD\app\Http\Controllers\Operations\ListOperation;
-use \Backpack\CRUD\app\Http\Controllers\Operations\CreateOperation;
-use \Backpack\CRUD\app\Http\Controllers\Operations\UpdateOperation;
-use \Backpack\CRUD\app\Http\Controllers\Operations\DeleteOperation;
 
 class PersonContactCrudController extends CrudController
 {
-    use ListOperation;
-    use CreateOperation;
-    use UpdateOperation;
-    use DeleteOperation;
+    use \Backpack\CRUD\app\Http\Controllers\Operations\ListOperation;
+    use \Backpack\CRUD\app\Http\Controllers\Operations\CreateOperation;
+    use \Backpack\CRUD\app\Http\Controllers\Operations\UpdateOperation;
+    use \Backpack\CRUD\app\Http\Controllers\Operations\DeleteOperation;
 
     public function setup()
     {
         CRUD::setModel(\App\Models\Core\PersonContact::class);
         CRUD::setRoute(config('backpack.base.route_prefix') . '/person-contact');
-        CRUD::setEntityNameStrings('contact', 'contacts');
+        CRUD::setEntityNameStrings('person contact', 'person contacts');
     }
 
     protected function setupListOperation()
     {
         //if (!backpack_user()->can('person_contact.view')) abort(403);
-        CRUD::column('person.name')->label('Person');
-        CRUD::column('contact_type');
-        CRUD::column('contact_value');
+        CRUD::column('person.first_name')->label('Person First Name');
+        CRUD::column('type');
+        CRUD::column('name');
+        CRUD::column('mobile');
+        CRUD::column('email');
+        CRUD::column('relationship');
         CRUD::column('is_primary')->type('boolean');
         CRUD::column('verified')->type('boolean');
     }
@@ -36,11 +35,79 @@ class PersonContactCrudController extends CrudController
     protected function setupCreateOperation()
     {
         //if (!backpack_user()->can('person_contact.create')) abort(403);
-        CRUD::field('person_id')->type('select2')->entity('person')->attribute('name');
-        CRUD::field('contact_type')->type('select_from_array')->options(['phone' => 'Phone', 'email' => 'Email', 'mobile' => 'Mobile'])->required();
-        CRUD::field('contact_value')->required();
-        CRUD::field('is_primary')->type('boolean');
-        CRUD::field('verified')->type('boolean')->default(false);
+        CRUD::setValidation([
+            'person_id'    => 'required|exists:persons,id',
+            'type'         => 'required|string|max:50',
+            'name'         => 'required|string|max:100',
+            'mobile'       => 'nullable|string|max:20',
+            'email'        => 'nullable|email|max:100',
+            'relationship' => 'nullable|string|max:50',
+            'note'         => 'nullable|string',
+            'is_primary'   => 'boolean',
+            'verified'     => 'boolean',
+        ]);
+
+        CRUD::field([
+            'name'       => 'person_id',
+            'label'      => 'Person',
+            'type'       => 'select',
+            'entity'     => 'person',
+            'attribute'  => 'first_name', // Using 'first_name' since 'name' is not defined
+            'model'      => \App\Models\Core\Person::class,
+            'attributes' => ['required' => 'required'],
+        ]);
+
+        CRUD::field([
+            'name'    => 'type',
+            'label'   => 'Contact Type',
+            'type'    => 'select_from_array',
+            'options' => ['phone' => 'Phone', 'email' => 'Email', 'mobile' => 'Mobile'],
+            'attributes' => ['required' => 'required'],
+        ]);
+
+        CRUD::field([
+            'name'       => 'name',
+            'label'      => 'Name',
+            'type'       => 'text',
+            'attributes' => ['required' => 'required'],
+        ]);
+
+        CRUD::field([
+            'name'  => 'mobile',
+            'label' => 'Mobile',
+            'type'  => 'text',
+        ]);
+
+        CRUD::field([
+            'name'  => 'email',
+            'label' => 'Email',
+            'type'  => 'email',
+        ]);
+
+        CRUD::field([
+            'name'  => 'relationship',
+            'label' => 'Relationship',
+            'type'  => 'text',
+        ]);
+
+        CRUD::field([
+            'name'  => 'note',
+            'label' => 'Note',
+            'type'  => 'textarea',
+        ]);
+
+        CRUD::field([
+            'name'    => 'is_primary',
+            'label'   => 'Is Primary',
+            'type'    => 'boolean',
+        ]);
+
+        CRUD::field([
+            'name'    => 'verified',
+            'label'   => 'Verified',
+            'type'    => 'boolean',
+            'default' => false,
+        ]);
     }
 
     protected function setupUpdateOperation()
