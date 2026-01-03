@@ -13,22 +13,21 @@ use Backpack\CRUD\app\Http\Controllers\Operations\DeleteOperation;
 
 class PersonBankingDetailCrudController extends CrudController
 {
-    // Alias the trait methods inside the class
-    use CreateOperation {
-        store as traitStore;
-    }
-    use UpdateOperation {
-        update as traitUpdate;
-    }
-    use ListOperation, DeleteOperation;
+    use ListOperation, CreateOperation, UpdateOperation, DeleteOperation;
 
     public function setup()
     {
         CRUD::setModel(PersonBankingDetail::class);
+
+        // ⚠️ ROUTE SAME RAHEGA
         CRUD::setRoute(config('backpack.base.route_prefix') . '/person-banking-detail');
+
         CRUD::setEntityNameStrings('Banking Detail', 'Banking Details');
     }
 
+    /**
+     * LIST
+     */
     protected function setupListOperation()
     {
         CRUD::addColumn([
@@ -52,6 +51,9 @@ class PersonBankingDetailCrudController extends CrudController
         ]);
     }
 
+    /**
+     * CREATE
+     */
     protected function setupCreateOperation()
     {
         CRUD::setValidation([
