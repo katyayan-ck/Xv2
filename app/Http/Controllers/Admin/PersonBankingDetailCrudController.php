@@ -35,13 +35,20 @@ class PersonBankingDetailCrudController extends CrudController
             'label'     => 'Person',
             'type'      => 'select',
             'entity'    => 'person',
-            'attribute' => 'display_name', // accessor
+            'attribute' => 'display_name',
         ]);
 
-        CRUD::column('bank_name');
-        CRUD::column('account_number');
-        CRUD::column('account_holder_name');
-        CRUD::column('is_primary')->type('boolean');
+        CRUD::addColumn('bank_name');
+        CRUD::addColumn('account_number');
+        CRUD::addColumn('account_holder_name');
+        CRUD::addColumn('account_type');
+        CRUD::addColumn('ifsc_code');
+
+        CRUD::addColumn([
+            'name'  => 'is_primary',
+            'label' => 'Primary?',
+            'type'  => 'boolean',
+        ]);
     }
 
     /**
@@ -51,70 +58,70 @@ class PersonBankingDetailCrudController extends CrudController
     {
         CRUD::setValidation([
             'person_id'           => 'required|exists:persons,id',
-            'bank_name'           => 'required',
-            'account_number'      => 'required',
-            'account_holder_name' => 'required',
+            'bank_name'           => 'required|string|max:255',
+            'account_number'      => 'required|string|max:255',
+            'account_holder_name' => 'required|string|max:255',
+            'account_type'        => 'required|in:savings,current,other',
+            'ifsc_code'           => 'nullable|string|max:20',
+            'is_primary'          => 'sometimes|boolean',
         ]);
 
-        // 🔥 THIS FIXES THE ERROR
         CRUD::addField([
             'name'      => 'person_id',
             'label'     => 'Person',
             'type'      => 'select',
             'entity'    => 'person',
             'model'     => Person::class,
-            'attribute' => 'display_name', // NOT "name"
+            'attribute' => 'display_name',
         ]);
 
-        CRUD::addField([
-            'name'  => 'bank_name',
-            'type'  => 'text',
-            'label' => 'Bank Name',
-        ]);
-
-        CRUD::addField([
-            'name'  => 'account_number',
-            'type'  => 'text',
-            'label' => 'Account Number',
-        ]);
-
-        CRUD::addField([
-            'name'  => 'account_holder_name',
-            'type'  => 'text',
-            'label' => 'Account Holder Name',
-        ]);
+        CRUD::field('bank_name')->type('text')->label('Bank Name');
+        CRUD::field('account_number')->type('text')->label('Account Number');
+        CRUD::field('account_holder_name')->type('text')->label('Account Holder Name');
 
         CRUD::addField([
             'name'    => 'account_type',
+            'label'   => 'Account Type',
             'type'    => 'select_from_array',
             'options' => [
                 'savings' => 'Savings',
                 'current' => 'Current',
                 'other'   => 'Other',
             ],
+            'default' => 'savings',
         ]);
+
+        CRUD::field('ifsc_code')->type('text')->label('IFSC Code')->hint('Optional');
 
         CRUD::addField([
-            'name'  => 'ifsc_code',
-            'type'  => 'text',
-            'label' => 'IFSC Code',
+            'name'  => 'is_primary',
+            'label' => 'Is Primary Account?',
+            'type'  => 'checkbox',
         ]);
-
-        CRUD::addField([
-            'name'    => 'is_primary',
-            'type'    => 'boolean',
-            'default' => true,
-        ]);
-    }
-
-    public function store()
-    {
-        $response = parent::store();
-        return redirect($this->crud->route);
     }
 
     protected function setupUpdateOperation()
     {
         $this->setupCreateOperation();
+    }
+
+    /**
+     * Custom store: run original logic then redirect to list
+     */
+    public function store()
+    {
+        $this->traitStore(); // Calls the original CreateOperation::store()
+
+        return redirect($this->crud->route);
+    }
+
+    /**
+     * Custom update: run original logic then redirect to list
+     */
+    public function update()
+    {
+        $this->traitUpdate(); // Calls the original UpdateOperation::update()
+
+        return redirect($this->crud->route);
     }
 }

@@ -18,7 +18,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Register services as singletons for performance
+        // // Register services as singletons for performance
         $this->app->singleton(RBACService::class, function ($app) {
             return new RBACService();
         });
@@ -34,7 +34,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ApprovalService::class, function ($app) {
             return new ApprovalService();
         });
-
 
         // Firebase Services
         $this->app->singleton(FirebaseService::class, function ($app) {
