@@ -8,6 +8,7 @@ use \Backpack\CRUD\app\Http\Controllers\Operations\ListOperation;
 use \Backpack\CRUD\app\Http\Controllers\Operations\CreateOperation;
 use \Backpack\CRUD\app\Http\Controllers\Operations\UpdateOperation;
 use \Backpack\CRUD\app\Http\Controllers\Operations\DeleteOperation;
+use App\Models\Core\Branch;
 
 class LocationCrudController extends CrudController
 {
@@ -34,12 +35,41 @@ class LocationCrudController extends CrudController
         CRUD::column('is_active')->type('boolean');
     }
 
+    // protected function setupCreateOperation()
+    // {
+    //     //if (!backpack_user()->can('location.create')) abort(403);
+    //     CRUD::field('code');
+    //     CRUD::field('name')->required();
+    //     CRUD::field('branch_id')->type('select2')->entity('branch')->attribute('name');
+    //     CRUD::field('description')->type('textarea');
+    //     CRUD::field('address')->type('textarea');
+    //     CRUD::field('city');
+    //     CRUD::field('state');
+    //     CRUD::field('pincode');
+    //     CRUD::field('country');
+    //     CRUD::field('latitude');
+    //     CRUD::field('longitude');
+    //     CRUD::field('is_active')->type('boolean')->default(true);
+    // }
     protected function setupCreateOperation()
     {
-        //if (!backpack_user()->can('location.create')) abort(403);
         CRUD::field('code');
-        CRUD::field('name')->required();
-        CRUD::field('branch_id')->type('select2')->entity('branch')->attribute('name');
+
+        CRUD::field([
+            'name' => 'name',
+            'type' => 'text',
+            'required' => true,
+        ]);
+
+        CRUD::field([
+            'name'  => 'branch_id',
+            'label' => 'Branch',
+            'type'  => 'select',
+            'entity' => 'branch',
+            'model' => Branch::class,
+            'attribute' => 'name',
+        ]);
+
         CRUD::field('description')->type('textarea');
         CRUD::field('address')->type('textarea');
         CRUD::field('city');
@@ -48,8 +78,14 @@ class LocationCrudController extends CrudController
         CRUD::field('country');
         CRUD::field('latitude');
         CRUD::field('longitude');
-        CRUD::field('is_active')->type('boolean')->default(true);
+
+        CRUD::field([
+            'name' => 'is_active',
+            'type' => 'boolean',
+            'default' => true,
+        ]);
     }
+
 
     protected function setupUpdateOperation()
     {

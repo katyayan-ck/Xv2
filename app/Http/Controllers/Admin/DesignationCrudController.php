@@ -32,14 +32,43 @@ class DesignationCrudController extends CrudController
         CRUD::column('is_active')->type('boolean');
     }
 
+    // protected function setupCreateOperation()
+    // {
+    //     //if (!backpack_user()->can('designation.create')) abort(403);
+    //     CRUD::field('code');
+    //     CRUD::field('name')->required();
+    //     CRUD::field('description')->type('textarea');
+    //     CRUD::field('is_active')->type('boolean')->default(true);
+    // }
     protected function setupCreateOperation()
     {
-        //if (!backpack_user()->can('designation.create')) abort(403);
-        CRUD::field('code');
-        CRUD::field('name')->required();
-        CRUD::field('description')->type('textarea');
-        CRUD::field('is_active')->type('boolean')->default(true);
+        CRUD::field([
+            'name'  => 'code',
+            'type'  => 'text',
+            'label' => 'Code',
+        ]);
+
+        CRUD::field([
+            'name'     => 'name',
+            'type'     => 'text',
+            'label'    => 'Name',
+            'required' => true,
+        ]);
+
+        CRUD::field([
+            'name'  => 'description',
+            'type'  => 'textarea',
+            'label' => 'Description',
+        ]);
+
+        CRUD::field([
+            'name'    => 'is_active',
+            'type'    => 'boolean',
+            'label'   => 'Active',
+            'default' => true,
+        ]);
     }
+
 
     protected function setupUpdateOperation()
     {

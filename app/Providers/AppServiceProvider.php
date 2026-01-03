@@ -18,22 +18,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // // Register services as singletons for performance
-        // $this->app->singleton(RBACService::class, function ($app) {
-        //     return new RBACService();
-        // });
+        // Register services as singletons for performance
+        $this->app->singleton(RBACService::class, function ($app) {
+            return new RBACService();
+        });
 
-        // $this->app->singleton(DataScopeService::class, function ($app) {
-        //     return new DataScopeService();
-        // });
+        $this->app->singleton(DataScopeService::class, function ($app) {
+            return new DataScopeService();
+        });
 
-        // $this->app->singleton(AuthService::class, function ($app) {
-        //     return new AuthService();
-        // });
+        $this->app->singleton(AuthService::class, function ($app) {
+            return new AuthService();
+        });
 
-        // $this->app->singleton(ApprovalService::class, function ($app) {
-        //     return new ApprovalService();
-        // });
+        $this->app->singleton(ApprovalService::class, function ($app) {
+            return new ApprovalService();
+        });
+
 
         // Firebase Services
         $this->app->singleton(FirebaseService::class, function ($app) {
@@ -46,6 +47,7 @@ class AppServiceProvider extends ServiceProvider
             );
         });
     }
+
 
     /**
      * Bootstrap any application services.
